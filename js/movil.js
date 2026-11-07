@@ -127,6 +127,7 @@ async function recibirCompartido() {
   let texto = [c.title, c.text].filter(Boolean).join('\n');
   for (const f of archivos) if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) { try { texto += '\n' + await textoPdf(f); } catch (e) { /* se carga a mano */ } }
   const d = leerDatos(texto, L);
+  if (!d.operacion) for (const f of archivos) { const m = String(f.name || '').match(/(\d{8,})/); if (m) { d.operacion = m[1]; break; } }   // Mercado Pago: comprobante_<N° de operación>.png
   history.replaceState(null, '', location.pathname + '#principal');
   cargarPago(Object.assign({ archivos }, d), () => recargar());
   toast(d.importe ? 'Revisá los datos que se leyeron del comprobante y elegí ' + (d.proveedor_id ? 'desde dónde pagaste' : 'a quién le pagaste') : 'Comprobante adjuntado: completá el importe y a quién le pagaste');
