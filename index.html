@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#12324a">
+<link rel="icon" href="img/favicon.png"><link rel="apple-touch-icon" href="img/icono-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Pagos">
+<title>Pagos Farmacia</title>
+<link rel="stylesheet" href="static/estilo.css">
+<script>try { if (localStorage.getItem('tema') === 'dark') document.documentElement.dataset.theme = 'dark'; if (localStorage.getItem('mini') === '1') document.documentElement.classList.add('mini-pre'); } catch (e) {}</script>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <div class="marca">
+      <div class="logo" id="logo"></div>
+      <div class="gymnom" id="gymNom"></div>
+      <div class="herr">
+        <button id="btnTema" title="Modo oscuro / claro"></button>
+        <button id="btnMini" title="Achicar / agrandar menú"></button>
+      </div>
+    </div>
+    <nav id="menu"></nav>
+    <div class="firma-sw" title="RoFac v1.0"><span class="fs-larga">RoFac v1.0</span><span class="fs-corta">RF</span></div>
+  </aside>
+  <div id="cuerpo">
+    <header id="top">
+      <button class="tb" id="btnMenuMov" title="Menú"></button>
+      <div class="tit" id="topTit"></div>
+      <div class="sp"></div>
+      <button class="tb" id="btnTurnoRapido" title="Cargar pago"></button>
+      <button class="tb" id="btnAyuda"></button>
+      <button class="tb" id="btnNotif"></button>
+    </header>
+    <div id="bannerLic" style="display:none"></div>
+    <main id="main"></main>
+  </div>
+</div>
+<div id="velo"></div>
+<div id="flyout"></div>
+<div id="notifs"></div>
+<div id="toast"></div>
+<div id="pieImpresion">Sistema de gestión RoFac v1.0</div>
+<script>window.MARCA = 'RoFac'; window.VERSION = '1.0';</script>
+<script src="lib/sql-wasm.js"></script>
+<script src="js/zip.js"></script>
+<script src="js/servidor.js"></script>
+<script src="js/movil.js"></script>
+<script src="static/app.js"></script>
+<script src="static/pagos.js"></script>
+<script src="static/pantallas.js"></script>
+</body>
+</html>

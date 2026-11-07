@@ -1,0 +1,33 @@
+PAGOS FARMACIA · App para el celular (RoFac v1.0)
+=================================================
+
+Es el mismo programa de la PC (proveedores, resúmenes, pagos con comprobante, gastos, sueldos semanales,
+informes), pero como app del celular: anda SIN la compu y SIN internet. Los datos quedan en el celular.
+
+NUEVO: COMPARTIR DESDE EL BANCO O MERCADO PAGO
+En el comprobante de la transferencia tocá "Compartir" y elegí "Pagos Farmacia".
+Se abre "Cargar pago" con el comprobante adjunto. Si el comprobante es PDF, la app lee sola el importe,
+el N° de operación y, si lo reconoce, el proveedor (revisalo antes de guardar). Si es una imagen, escribís el importe.
+(Para que aparezca en Compartir la app tiene que estar INSTALADA. En iPhone no aparece.)
+
+CÓMO PUBLICARLA (igual que Wolves y Aguas Santa María)
+1. GitHub (Rofac) > "+" > New repository > nombre: Pagos (Public) > Create.
+2. Add file > Upload files: index.html, sw.js, manifest.webmanifest, LEEME.txt > Commit changes.
+3. Subir las carpetas de a una: static, js, lib, img > Commit changes cada vez.
+4. Settings > Pages > Branch "main" y "/ (root)" > Save. Esperar 1 o 2 minutos.
+   Queda en: https://rofac.github.io/Pagos/
+OJO: el repositorio es público pero NO tiene datos tuyos: los datos quedan sólo en tu celular.
+
+EN EL CELULAR
+1. Abrir la dirección en Chrome > menú ⋮ > "Instalar app" (o "Agregar a la pantalla principal").
+2. Para traer lo que ya cargaste en la compu:
+   en la PC, Configuración > "Descargar una copia completa" (.zip) > mandátelo por WhatsApp o Drive >
+   en el celular, Configuración > "Traer datos de la PC / restaurar una copia" > elegir el .zip.
+   Pasan pagos, proveedores, resúmenes, sueldos, bancos y los comprobantes.
+
+COPIA DE SEGURIDAD (MUY IMPORTANTE)
+Todo está en el celular. Configuración > "Hacer copia ahora" > guardala en Google Drive. Una vez por semana
+(la app avisa en el Inicio). La copia es el mismo .zip que arma la PC.
+Además, la app guarda sola una copia por día adentro del celular (las últimas 7, sin comprobantes).
+
+ACTUALIZAR: subir los archivos nuevos al mismo repositorio. Los datos no se tocan.
