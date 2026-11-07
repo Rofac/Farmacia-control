@@ -1,6 +1,6 @@
 /* Guarda la app en el celular para que abra sin internet, y recibe los comprobantes que se comparten desde el banco o Mercado Pago.
    Al cambiar VERSION, el celular baja la versión nueva la próxima vez que abre la app con internet. */
-const VERSION = 'pag-1.0.2';
+const VERSION = 'pag-1.0.3';
 const ARCHIVOS = ['./', 'index.html', 'manifest.webmanifest', 'static/estilo.css', 'static/app.js', 'static/pagos.js', 'static/pantallas.js',
   'js/zip.js', 'js/servidor.js', 'js/movil.js', 'lib/sql-wasm.js', 'lib/sql-wasm.wasm', 'lib/pdf.js', 'lib/pdf.worker.js',
   'img/favicon.png', 'img/icono-180.png', 'img/icono-192.png', 'img/icono-512.png', 'img/icono-maskable.png'];
