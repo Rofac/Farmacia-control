@@ -673,3 +673,51 @@ tr.demorado td { background:rgba(226,59,74,.06); }
   .su-bot .btn { flex:1 1 45%; }
   .su-total b { font-size:20px; }
 }
+
+/* ---------------- turnos de farmacia y vacaciones */
+.tu-nav { display:flex; align-items:center; gap:10px; padding:10px 12px; }
+.tu-nav-t { flex:1; text-align:center; } .tu-nav-t b { display:block; font-size:18px; } .tu-nav-t small { color:var(--txt2); }
+.tu-barra { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+.tu-seg { display:inline-flex; background:var(--card2); border:1px solid var(--borde); border-radius:22px; padding:3px; }
+.tu-seg button { border:0; background:none; padding:7px 14px; border-radius:18px; font:inherit; font-weight:600; color:var(--txt2); cursor:pointer; }
+.tu-seg button.act { background:var(--pri); color:#fff; }
+.tu-grilla { display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); border-top:1px solid var(--borde); border-left:1px solid var(--borde); }
+.tu-dn { text-align:center; font-weight:700; font-size:11px; text-transform:uppercase; color:var(--txt2); padding:7px 0; background:var(--card2); border-right:1px solid var(--borde); border-bottom:1px solid var(--borde); }
+.tu-c { position:relative; min-height:68px; border-right:1px solid var(--borde); border-bottom:1px solid var(--borde); padding:17px 2px 14px; text-align:center; cursor:pointer; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:1px; }
+.tu-c:hover { background:var(--card2); }
+.tu-c .n { position:absolute; top:3px; right:5px; font-size:11.5px; font-weight:700; }
+.tu-c .f { font-size:10.5px; line-height:1.15; color:var(--txt2); word-break:break-word; }
+.tu-c.fuera { opacity:.45; }
+.tu-c.nuestra { background:#e7e1fb; } .tu-c.nuestra .f { color:#4b3fa8; font-weight:800; font-size:11.5px; }
+:root[data-theme="dark"] .tu-c.nuestra { background:#2c2752; } :root[data-theme="dark"] .tu-c.nuestra .f { color:#c9c1ff; }
+.tu-c.est { background-image:repeating-linear-gradient(135deg, transparent 0 6px, rgba(255,255,255,.55) 6px 8px); }
+:root[data-theme="dark"] .tu-c.est { background-image:repeating-linear-gradient(135deg, transparent 0 6px, rgba(255,255,255,.07) 6px 8px); }
+.tu-c.hoy .n { background:var(--pri); color:#fff; border-radius:10px; padding:2px 6px; top:2px; right:2px; }
+.tu-c .tachado, .tachado { text-decoration:line-through; text-decoration-color:var(--rojo); text-decoration-thickness:2px; color:var(--txt2); }
+.tu-cam { position:absolute; left:4px; top:3px; color:var(--rojo); font-size:11px; font-weight:700; }
+.tu-vac { position:absolute; left:2px; right:2px; bottom:2px; display:flex; gap:2px; justify-content:center; flex-wrap:wrap; }
+.tu-vac i { font-style:normal; font-size:9px; font-weight:800; background:#fff0d6; color:#a35f00; border-radius:6px; padding:0 3px; line-height:13px; }
+.tu-sem { display:flex; gap:12px; padding:10px 0; border-bottom:1px solid var(--borde); cursor:pointer; align-items:center; }
+.tu-sem:last-child { border-bottom:0; }
+.tu-sem-d { width:44px; text-align:center; flex:none; } .tu-sem-d small { display:block; text-transform:uppercase; font-size:11px; color:var(--txt2); font-weight:700; } .tu-sem-d b { font-size:22px; }
+.tu-sem.hoy .tu-sem-d b { background:var(--pri); color:#fff; border-radius:50%; display:inline-block; width:34px; height:34px; line-height:34px; font-size:17px; }
+.tu-sem-t { flex:1; min-width:0; font-size:14.5px; }
+.tu-marca { background:linear-gradient(100deg, transparent 2%, #d9d0fb 3% 97%, transparent 98%); color:#3b2f94; font-weight:800; padding:1px 6px; border-radius:4px; }
+:root[data-theme="dark"] .tu-marca { background:#3b3470; color:#e0dbff; }
+.tu-dia { text-align:center; padding:12px; border-radius:12px; background:var(--card2); border:1px solid var(--borde); }
+.tu-dia.nuestra { background:#ece7fd; } :root[data-theme="dark"] .tu-dia.nuestra { background:#2c2752; }
+.tu-dia small { color:var(--txt2); font-weight:700; text-transform:uppercase; font-size:12px; } .tu-dia b { display:block; font-size:24px; margin-top:2px; }
+.tu-pills { display:flex; flex-wrap:wrap; gap:7px; }
+.tu-pills button { border:1.5px solid var(--borde); background:var(--card); color:var(--txt); border-radius:20px; padding:8px 13px; font:inherit; cursor:pointer; }
+.tu-pills button.nues { border-color:#a99ce8; } .tu-pills button.act { background:var(--pri); color:#fff; border-color:var(--pri); }
+.tu-pills.chicas button { padding:5px 10px; font-size:13px; border-style:dashed; }
+.tu-ord { display:flex; align-items:center; gap:6px; padding:5px 0; border-bottom:1px solid var(--borde); } .tu-ord span:nth-child(2) { flex:1; } .tu-ord .nro { width:22px; text-align:center; font-weight:800; color:var(--txt2); }
+.tu-inicio { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+.tu-ini { flex:1 1 220px; display:flex; gap:12px; align-items:center; padding:12px 16px; margin:0; cursor:pointer; }
+.tu-ini svg.i { width:28px; height:28px; color:var(--pri); } .tu-ini small { display:block; color:var(--txt2); font-weight:700; font-size:11.5px; text-transform:uppercase; } .tu-ini b { font-size:16px; margin-right:6px; }
+.tu-ini.nuestra { background:#ece7fd; border-color:#c9bff5; } .tu-ini.nuestra svg.i { color:#4b3fa8; }
+:root[data-theme="dark"] .tu-ini.nuestra { background:#2c2752; border-color:#3b3470; }
+.va-n { display:flex; gap:8px; margin:4px 0 8px; } .va-n div { flex:1; text-align:center; background:var(--card2); border-radius:10px; padding:6px 4px; }
+.va-n small { display:block; font-size:11px; color:var(--txt2); font-weight:700; } .va-n b { font-size:22px; }
+.va-f { cursor:pointer; } .va-f svg.i { width:15px; height:15px; color:var(--txt2); }
+@media (max-width:600px) { .tu-c { min-height:60px; } .tu-c .f { font-size:9.5px; } .tu-c.nuestra .f { font-size:10px; } }

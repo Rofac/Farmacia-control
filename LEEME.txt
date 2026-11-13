@@ -10,7 +10,22 @@ Se abre "Cargar pago" con el comprobante adjunto. Si el comprobante es PDF, la a
 el N° de operación y, si lo reconoce, el proveedor (revisalo antes de guardar). Si es una imagen, escribís el importe.
 (Para que aparezca en Compartir la app tiene que estar INSTALADA. En iPhone no aparece.)
 
+NUEVO (v1.1): TURNOS DE FARMACIA Y VACACIONES
+- Turnos de farmacia: calendario por mes y por semana con la farmacia de turno de cada día; Roma y Roma II resaltadas.
+  Viene cargada la rotación de 8 farmacias desde el 1/11/2026, confirmada hasta el 31/12/2026; después es
+  "estimado" (rayado) hasta que se cargue el listado nuevo ("Listado de turnos").
+  Tocando un día: "Cambiar guardia" (cederla a otra farmacia, tomar una, o intercambio: la cedemos y nos devuelven otro día)
+  y "Volver al listado". "Al calendario del celular" pasa las guardias al calendario con aviso la noche anterior.
+- Vacaciones: días corridos, 14 por año a cada empleado (se cambia con el lápiz si a alguno le corresponden más).
+  Le corresponden / tomó / le quedan. Si pide más de lo que le queda, el resto queda como ADELANTO a cuenta del año
+  siguiente (avisa antes de guardar). Avisa si se superponen o si coinciden con otro empleado. Borrar tiene "Deshacer".
+  En el calendario de turnos aparecen las iniciales de quien está de vacaciones, y en el Inicio la guardia de hoy, la próxima y quién está de vacaciones.
+- OJO: la copia de la PC no tiene turnos ni vacaciones (son sólo del celular). Si restaurás una copia de la PC, se pierden.
+
 CÓMO PUBLICARLA (igual que Wolves y Aguas Santa María)
+ACTUALIZAR LA QUE YA TENÉS: en el repositorio Farmacia-control subir/reemplazar index.html, sw.js, LEEME.txt,
+static/estilo.css, static/app.js, static/turnos.js (nuevo) y js/servidor.js. Los datos del celular no se tocan.
+
 1. GitHub (Rofac) > "+" > New repository > nombre: Pagos (Public) > Create.
 2. Add file > Upload files: index.html, sw.js, manifest.webmanifest, LEEME.txt > Commit changes.
 3. Subir las carpetas de a una: static, js, lib, img > Commit changes cada vez.

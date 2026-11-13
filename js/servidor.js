@@ -10,9 +10,12 @@ const SRV = (() => {
   const DEFAULT_CONFIG = {
     nombre_negocio: 'Farmacia Roma',
     categorias_gasto: 'Alquiler,Internet,Luz,Agua,Gas,Teléfono,Impuestos,Contador,Limpieza,Mantenimiento,Seguro,Personales,Otros',
-    dias_aviso_acreditar: '5', sueldo_valor_dia: '24000', sueldo_dias: '7', sueldo_cena: '12000', celular: '0',
+    dias_aviso_acreditar: '5', sueldo_valor_dia: '24000', sueldo_dias: '7', sueldo_cena: '12000', celular: '0', turnos_confirmado_hasta: '2026-12-31',
   };
   const PROVEEDORES_INICIALES = ['Droguería del Sud', 'Cofaral', 'Monroe Americana'];
+  /* rotación de turnos (cada 8 días se repite), empieza el 1/11/2026 con Cristal */
+  const TURNOS_INICIALES = [['cristal', 'Cristal', 'Cristal', 0], ['sanjose', 'San José', 'S. José', 0], ['villaberthet', 'Villa Berthet', 'V. Berthet', 0], ['roma2', 'Roma II', 'Roma II', 1],
+    ['sanmartin', 'San Martín', 'S. Martín', 0], ['roma', 'Roma', 'Roma', 1], ['delcarmen', 'Del Carmen', 'D. Carmen', 0], ['charytonow', 'Charytonow', 'Charyt.', 0]];
   const SCHEMA = `
 CREATE TABLE IF NOT EXISTS config (clave TEXT PRIMARY KEY, valor TEXT);
 CREATE TABLE IF NOT EXISTS cuentas (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL, tipo TEXT DEFAULT 'BANCO', notas TEXT DEFAULT '', activo INTEGER DEFAULT 1, orden INTEGER DEFAULT 0);
@@ -35,9 +38,16 @@ CREATE INDEX IF NOT EXISTS idx_adj ON adjuntos(pago_id);
 CREATE TABLE IF NOT EXISTS sueldo_semanas (id INTEGER PRIMARY KEY AUTOINCREMENT, empleado_id INTEGER NOT NULL REFERENCES empleados(id), viernes TEXT NOT NULL,
   dias REAL DEFAULT 0, valor_dia REAL DEFAULT 0, turnos REAL DEFAULT 0, cena REAL DEFAULT 0, extra REAL DEFAULT 0, extra_detalle TEXT DEFAULT '',
   total REAL DEFAULT 0, notas TEXT DEFAULT '', creado TEXT, modificado TEXT DEFAULT '', UNIQUE(empleado_id, viernes));
-CREATE TABLE IF NOT EXISTS actividad (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT NOT NULL, accion TEXT NOT NULL, detalle TEXT DEFAULT '');`;
+CREATE TABLE IF NOT EXISTS actividad (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT NOT NULL, accion TEXT NOT NULL, detalle TEXT DEFAULT '');
+CREATE TABLE IF NOT EXISTS turno_farmacias (id TEXT PRIMARY KEY, nombre TEXT NOT NULL, corto TEXT DEFAULT '', nuestra INTEGER DEFAULT 0, orden INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS turno_listados (desde TEXT PRIMARY KEY, orden TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS turno_cambios (fecha TEXT PRIMARY KEY, farmacia TEXT NOT NULL, nota TEXT DEFAULT '', par TEXT DEFAULT '', creado TEXT);
+CREATE TABLE IF NOT EXISTS vacaciones (id INTEGER PRIMARY KEY AUTOINCREMENT, empleado_id INTEGER NOT NULL REFERENCES empleados(id), desde TEXT NOT NULL, hasta TEXT NOT NULL,
+  dias INTEGER NOT NULL, anio INTEGER NOT NULL, adelanto INTEGER DEFAULT 0, notas TEXT DEFAULT '', estado TEXT DEFAULT 'ACTIVO', creado TEXT);
+CREATE INDEX IF NOT EXISTS idx_vac ON vacaciones(empleado_id, anio);`;
   const MIGRACIONES = {
-    empleados: [['valor_dia', 'REAL DEFAULT 0'], ['dias_semana', 'REAL DEFAULT 7'], ['cena', 'REAL DEFAULT 0'], ['saldo_inicial', 'REAL DEFAULT 0'], ['cuenta_desde', "TEXT DEFAULT ''"]],
+    empleados: [['valor_dia', 'REAL DEFAULT 0'], ['dias_semana', 'REAL DEFAULT 7'], ['cena', 'REAL DEFAULT 0'], ['saldo_inicial', 'REAL DEFAULT 0'], ['cuenta_desde', "TEXT DEFAULT ''"],
+      ['vac_dias', 'INTEGER DEFAULT 14'], ['ingreso', "TEXT DEFAULT ''"]],
     pagos: [['adelanto', 'INTEGER DEFAULT 0']],
   };
 
@@ -129,6 +139,13 @@ CREATE TABLE IF NOT EXISTS actividad (id INTEGER PRIMARY KEY AUTOINCREMENT, fech
       if (!q1('SELECT 1 FROM proveedores')) for (const n of PROVEEDORES_INICIALES) run('INSERT INTO proveedores(nombre, principal, creado) VALUES (?, 1, ?)', [n, ahora()]);
       if (!q1('SELECT 1 FROM cuentas')) run("INSERT INTO cuentas(nombre, tipo, orden) VALUES ('Efectivo', 'EFECTIVO', 0)");
       run("INSERT INTO config(clave, valor) VALUES ('iniciales', '1')");
+    }
+    if (!q1("SELECT 1 FROM config WHERE clave = 'turnos_iniciales'")) {     // el listado de turnos de las farmacias (noviembre y diciembre 2026)
+      if (!q1('SELECT 1 FROM turno_farmacias')) {
+        TURNOS_INICIALES.forEach(([id, nombre, corto, nuestra], i) => run('INSERT INTO turno_farmacias(id, nombre, corto, nuestra, orden) VALUES (?,?,?,?,?)', [id, nombre, corto, nuestra, i]));
+        run('INSERT OR IGNORE INTO turno_listados(desde, orden) VALUES (?, ?)', ['2026-11-01', JSON.stringify(TURNOS_INICIALES.map(x => x[0]))]);
+      }
+      run("INSERT INTO config(clave, valor) VALUES ('turnos_iniciales', '1')");
     }
   }
   async function abrir() {
@@ -306,6 +323,9 @@ CREATE TABLE IF NOT EXISTS actividad (id INTEGER PRIMARY KEY AUTOINCREMENT, fech
     if (valor < 0 || cena < 0 || !(dias >= 0 && dias <= 7)) E('Revisá lo que cobra por día, los días por semana (0 a 7) y la cena');
     const desde = d.cuenta_desde ? fechaOk(d.cuenta_desde, 'fecha desde cuándo se lleva la cuenta') : sabadoDe(hoy());
     const activo = (d.activo ?? 1) ? 1 : 0;
+    const vacN = vacio(d.vac_dias) ? null : Math.trunc(num(d.vac_dias));
+    if (vacN !== null && !(vacN >= 0 && vacN <= 60)) E('Los días de vacaciones por año van de 0 a 60');
+    const ingreso = d.ingreso ? fechaOk(d.ingreso, 'fecha de ingreso') : '';
     const par = [nombre, txt(d.cuil, 20), txt(d.cbu, 60), txt(d.telefono, 40), r2(valor * dias), String(d.notas || '').trim().slice(0, 500), activo, valor, dias, cena, r2(num(d.saldo_inicial)), desde];
     let eid;
     if (d.id) {
@@ -314,6 +334,8 @@ CREATE TABLE IF NOT EXISTS actividad (id INTEGER PRIMARY KEY AUTOINCREMENT, fech
         congelar(viejo, activo ? viernesDe(hoy()) : masDias(viernesDe(hoy()), 7));
       run('UPDATE empleados SET nombre=?, cuil=?, cbu=?, telefono=?, sueldo=?, notas=?, activo=?, valor_dia=?, dias_semana=?, cena=?, saldo_inicial=?, cuenta_desde=? WHERE id=?', [...par, eid]);
     } else eid = run('INSERT INTO empleados(nombre, cuil, cbu, telefono, sueldo, notas, activo, valor_dia, dias_semana, cena, saldo_inicial, cuenta_desde) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', par);
+    if (vacN !== null) run('UPDATE empleados SET vac_dias = ? WHERE id = ?', [vacN, eid]);
+    if (d.ingreso !== undefined) run('UPDATE empleados SET ingreso = ? WHERE id = ?', [ingreso, eid]);
     return { ok: true, id: eid };
   });
   ruta('GET', '/api/sueldos', (d, args) => {
@@ -367,6 +389,162 @@ CREATE TABLE IF NOT EXISTS actividad (id INTEGER PRIMARY KEY AUTOINCREMENT, fech
     movs.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.orden - b.orden);
     let sal = 0; for (const m of movs) { sal = r2(sal + m.gano - m.pago); m.saldo = sal; }
     return { empleado: e, movimientos: movs.reverse(), saldo: sal };
+  });
+
+  /* ------------------------------------------------ TURNOS DE FARMACIA (guardias) */
+  const farmaciasT = () => q('SELECT * FROM turno_farmacias ORDER BY orden, nombre COLLATE NOCASE');
+  const farmaciaT = id => q1('SELECT * FROM turno_farmacias WHERE id = ?', [id]);
+  const listadosT = () => q('SELECT * FROM turno_listados ORDER BY desde').map(r => ({ desde: r.desde, orden: JSON.parse(r.orden || '[]') }));
+  const confirmadoHasta = () => getConfig().turnos_confirmado_hasta || '2026-12-31';
+  function oficialT(f, ls) {
+    ls = ls || listadosT(); if (!ls.length) return null;
+    let r = ls[0]; for (const x of ls) if (x.desde <= f) r = x;
+    const n = r.orden.length; if (!n) return null;
+    return r.orden[((entreDias(r.desde, f) % n) + n) % n];
+  }
+  /* cómo queda cada día entre dos fechas: quién está de turno, si es nuestra, si se cambió */
+  function diasT(desde, hasta) {
+    const ls = listadosT(), fs = Object.fromEntries(farmaciasT().map(x => [x.id, x])), ch = confirmadoHasta();
+    const cambios = Object.fromEntries(q('SELECT * FROM turno_cambios WHERE fecha BETWEEN ? AND ?', [desde, hasta]).map(c => [c.fecha, c]));
+    const out = [];
+    for (let f = desde, k = 0; f <= hasta && k < 800; f = masDias(f, 1), k++) {
+      const of = oficialT(f, ls), c = cambios[f], t = c ? c.farmacia : of, ofN = !!(fs[of] || {}).nuestra, tN = !!(fs[t] || {}).nuestra;
+      out.push({ fecha: f, oficial: of, turno: t, nombre: (fs[t] || {}).nombre || t || '—', corto: (fs[t] || {}).corto || (fs[t] || {}).nombre || '', nombre_oficial: (fs[of] || {}).nombre || of || '—',
+        nuestra: tN, cedida: !!c && ofN && !tN, tomada: !!c && !ofN && tN, cambiado: !!c && t !== of, nota: c ? c.nota : '', par: c ? c.par : '', estimado: f > ch });
+    }
+    return out;
+  }
+  const vacEntre = (desde, hasta) => q("SELECT v.*, e.nombre FROM vacaciones v JOIN empleados e ON e.id = v.empleado_id WHERE v.estado = 'ACTIVO' AND v.desde <= ? AND v.hasta >= ? ORDER BY v.desde, e.nombre COLLATE NOCASE", [hasta, desde]);
+  ruta('GET', '/api/turnos', (d, args) => {
+    const desde = fechaOk(args.get('desde') || hoy().slice(0, 8) + '01'), hasta = fechaOk(args.get('hasta') || masDias(desde, 41));
+    if (entreDias(desde, hasta) > 400 || hasta < desde) E('Rango de fechas inválido');
+    return { dias: diasT(desde, hasta), farmacias: farmaciasT(), listados: listadosT(), confirmado_hasta: confirmadoHasta(), vacaciones: vacEntre(desde, hasta) };
+  });
+  ruta('GET', '/api/turnos/proximas', (d, args) => {
+    const n = Math.min(20, Math.trunc(num(args.get('n') || 5)) || 5), h = hoy(), l = diasT(h, masDias(h, 120));
+    return { hoy: l[0], proximas: l.filter(x => x.nuestra && x.fecha > h).slice(0, n), confirmado_hasta: confirmadoHasta() };
+  });
+  function quitarCambio(f) {
+    const c = q1('SELECT * FROM turno_cambios WHERE fecha = ?', [f]); if (!c) return;
+    run('DELETE FROM turno_cambios WHERE fecha = ?', [f]);
+    if (c.par) { const o = q1('SELECT * FROM turno_cambios WHERE fecha = ?', [c.par]); if (o && o.par === f) run('DELETE FROM turno_cambios WHERE fecha = ?', [c.par]); }
+  }
+  ruta('POST', '/api/turnos/cambio', d => {
+    const f = fechaOk(d.fecha), quien = String(d.farmacia || ''), fq = farmaciaT(quien); if (!fq) E('Elegí qué farmacia hace la guardia');
+    const of = oficialT(f), nota = txt(d.nota, 160), fo = farmaciaT(of) || {};
+    let par = d.par ? fechaOk(d.par, 'fecha del intercambio') : '';
+    if (par) {
+      if (par === f) E('El intercambio tiene que ser otro día');
+      if (!fo.nuestra || quien === of || fq.nuestra) E('El intercambio es para cuando le cedés una guardia nuestra a otra farmacia');
+      const op = oficialT(par); if (op !== quien) E(`El ${dmy(par).slice(0, 5)} no está de turno ${fq.nombre} (está ${(farmaciaT(op) || {}).nombre || '—'})`);
+    }
+    quitarCambio(f);
+    if (quien !== of || nota) run('INSERT INTO turno_cambios(fecha, farmacia, nota, par, creado) VALUES (?,?,?,?,?)', [f, quien, nota, par, ahora()]);
+    if (par) { quitarCambio(par); run('INSERT INTO turno_cambios(fecha, farmacia, nota, par, creado) VALUES (?,?,?,?,?)', [par, of, nota, f, ahora()]); }
+    anotar('Guardia cambiada', `${dmy(f)}: ${fq.nombre}${par ? ' · intercambio con el ' + dmy(par) : ''}${nota ? ' · ' + nota : ''}`);
+    return { ok: true };
+  });
+  ruta('DELETE', '/api/turnos/cambio/<str>', (d, f) => { f = fechaOk(f); quitarCambio(f); anotar('Guardia vuelta al listado', dmy(f)); return { ok: true }; });
+  ruta('POST', '/api/turnos/farmacias', d => {
+    const lista = Array.isArray(d.farmacias) ? d.farmacias : []; if (!lista.length) E('Tiene que haber al menos una farmacia');
+    const nombres = new Set(), ids = new Set();
+    for (const x of lista) {
+      x.nombre = txt(x.nombre, 40); x.corto = txt(x.corto, 12) || x.nombre; if (!x.nombre) E('Hay una farmacia sin nombre');
+      const k = x.nombre.toLowerCase(); if (nombres.has(k)) E(`Hay dos farmacias "${x.nombre}"`); nombres.add(k);
+      if (!x.id) { const b = k.normalize('NFD').replace(/[^a-z0-9]/g, '') || 'f'; let id = b, n = 2; while (ids.has(id) || farmaciaT(id)) id = b + n++; x.id = id; }
+      ids.add(String(x.id));
+    }
+    const usadas = new Set([...listadosT().flatMap(r => r.orden), ...q('SELECT farmacia FROM turno_cambios').map(r => r.farmacia)]);
+    for (const u of usadas) if (!ids.has(u)) E(`No se puede sacar "${(farmaciaT(u) || {}).nombre || u}": está en el listado de turnos o en un cambio`);
+    run('DELETE FROM turno_farmacias');
+    lista.forEach((x, i) => run('INSERT INTO turno_farmacias(id, nombre, corto, nuestra, orden) VALUES (?,?,?,?,?)', [String(x.id), x.nombre, x.corto, x.nuestra ? 1 : 0, i]));
+    anotar('Farmacias de turno', lista.map(x => x.nombre).join(', '));
+    return { ok: true };
+  });
+  ruta('POST', '/api/turnos/listado', d => {
+    const desde = fechaOk(d.desde, 'fecha desde la que empieza'), orden = (Array.isArray(d.orden) ? d.orden : []).map(String);
+    if (!orden.length) E('El listado está vacío');
+    if (new Set(orden).size !== orden.length) E('Hay una farmacia repetida en el listado');
+    for (const id of orden) if (!farmaciaT(id)) E('Hay una farmacia que no existe en el listado');
+    if (d.confirmado_hasta) fechaOk(d.confirmado_hasta, 'fecha "confirmado hasta"');
+    run('INSERT OR REPLACE INTO turno_listados(desde, orden) VALUES (?, ?)', [desde, JSON.stringify(orden)]);
+    if (d.confirmado_hasta) run("INSERT OR REPLACE INTO config(clave, valor) VALUES ('turnos_confirmado_hasta', ?)", [d.confirmado_hasta]);
+    anotar('Listado de turnos', 'desde ' + dmy(desde));
+    return { ok: true };
+  });
+  ruta('DELETE', '/api/turnos/listado/<str>', (d, f) => {
+    if (val('SELECT COUNT(*) FROM turno_listados') < 2) E('Tiene que quedar al menos un listado');
+    run('DELETE FROM turno_listados WHERE desde = ?', [fechaOk(f)]); anotar('Listado de turnos borrado', dmy(f)); return { ok: true };
+  });
+  ruta('POST', '/api/turnos/confirmado', d => {
+    const f = fechaOk(d.fecha, 'fecha'); run("INSERT OR REPLACE INTO config(clave, valor) VALUES ('turnos_confirmado_hasta', ?)", [f]); return { ok: true };
+  });
+
+  /* ------------------------------------------------ VACACIONES (días corridos; cada año le corresponden los de su ficha, 14 por defecto) */
+  const vacTomados = (eid, anio, sinId) => val("SELECT COALESCE(SUM(dias),0) FROM vacaciones WHERE empleado_id = ? AND anio = ? AND estado = 'ACTIVO' AND id != ?", [eid, anio, sinId || 0]);
+  const vacCorresponden = e => Math.max(0, Math.trunc(e.vac_dias ?? 14));
+  function vacResumen(e, anio) {
+    const corr = vacCorresponden(e), tom = vacTomados(e.id, anio), ant = anio - 1;
+    const tomAnt = vacTomados(e.id, ant), primerAnio = val("SELECT MIN(anio) FROM vacaciones WHERE empleado_id = ? AND estado = 'ACTIVO'", [e.id]);
+    return { anio, corresponden: corr, tomados: tom, quedan: corr - tom,
+      quedan_anterior: primerAnio != null && primerAnio <= ant ? Math.max(0, corr - tomAnt) : 0,
+      adelanto_siguiente: val("SELECT COALESCE(SUM(dias),0) FROM vacaciones WHERE empleado_id = ? AND anio = ? AND estado = 'ACTIVO' AND adelanto = 1", [e.id, anio + 1]) };
+  }
+  ruta('GET', '/api/vacaciones', (d, args) => {
+    const anio = Math.trunc(num(args.get('anio') || hoy().slice(0, 4))), h = hoy();
+    const emps = q('SELECT * FROM empleados WHERE activo = 1 ORDER BY nombre COLLATE NOCASE').map(e => {
+      const r = vacResumen(e, anio);
+      r.empleado = { id: e.id, nombre: e.nombre, vac_dias: vacCorresponden(e), ingreso: e.ingreso || '' };
+      r.lista = q("SELECT * FROM vacaciones WHERE empleado_id = ? AND estado = 'ACTIVO' AND (anio = ? OR substr(desde,1,4) = ? OR substr(hasta,1,4) = ?) ORDER BY desde", [e.id, anio, String(anio), String(anio)]);
+      r.ahora = q1("SELECT * FROM vacaciones WHERE empleado_id = ? AND estado = 'ACTIVO' AND desde <= ? AND hasta >= ?", [e.id, h, h]);
+      return r;
+    });
+    return { anio, empleados: emps, hoy: vacEntre(h, h), proximas: vacEntre(h, masDias(h, 60)).filter(v => v.desde > h) };
+  });
+  ruta('POST', '/api/vacaciones', d => {
+    const e = q1('SELECT * FROM empleados WHERE id = ?', [+d.empleado_id || 0]); if (!e) E('Elegí el empleado');
+    const desde = fechaOk(d.desde, 'fecha desde'), hasta = fechaOk(d.hasta, 'fecha hasta'); if (hasta < desde) E('La fecha "hasta" es antes de "desde"');
+    const dias = entreDias(desde, hasta) + 1; if (dias > 60) E('Son más de 60 días: revisá las fechas');
+    const vid = +d.id || 0, anio = Math.trunc(num(d.anio || desde.slice(0, 4)));
+    if (anio < 2000 || anio > 2100) E('Revisá el año al que corresponden');
+    const choca = q1("SELECT * FROM vacaciones WHERE empleado_id = ? AND estado = 'ACTIVO' AND id != ? AND desde <= ? AND hasta >= ?", [e.id, vid, hasta, desde]);
+    if (choca) E(`Ya tiene vacaciones del ${dmy(choca.desde)} al ${dmy(choca.hasta)} que se superponen`);
+    const quedan = vacCorresponden(e) - vacTomados(e.id, anio, vid);
+    const otros = q("SELECT DISTINCT e.nombre FROM vacaciones v JOIN empleados e ON e.id = v.empleado_id WHERE v.estado = 'ACTIVO' AND v.empleado_id != ? AND v.desde <= ? AND v.hasta >= ?", [e.id, hasta, desde]).map(r => r.nombre);
+    if (!d.forzar) {
+      const avisos = [];
+      if (dias > quedan) avisos.push(quedan > 0 ? `De ${anio} le quedan ${quedan} días. Los otros ${dias - quedan} van como <b>adelanto</b> a cuenta de ${anio + 1}.`
+        : `Ya usó los días de ${anio}. Los ${dias} días van como <b>adelanto</b> a cuenta de ${anio + 1}.`);
+      if (otros.length) avisos.push(`En esas fechas también está de vacaciones: <b>${otros.map(n => n.replace(/[<>&"']/g, '')).join(', ')}</b>.`);
+      if (avisos.length) return { confirmar: avisos.join('<br><br>') + '<br><br>¿Lo guardo así?' };
+    }
+    const notas = txt(d.notas, 200);
+    if (vid) run("UPDATE vacaciones SET estado = 'BORRADO' WHERE id = ?", [vid]);
+    const ins = (a, b, an, adel) => run('INSERT INTO vacaciones(empleado_id, desde, hasta, dias, anio, adelanto, notas, creado) VALUES (?,?,?,?,?,?,?,?)', [e.id, a, b, entreDias(a, b) + 1, an, adel, notas, ahora()]);
+    let id;
+    if (dias > quedan) {
+      if (quedan > 0) { id = ins(desde, masDias(desde, quedan - 1), anio, 0); ins(masDias(desde, quedan), hasta, anio + 1, 1); }
+      else id = ins(desde, hasta, anio + 1, 1);
+    } else id = ins(desde, hasta, anio, d.adelanto ? 1 : 0);
+    anotar('Vacaciones ' + (vid ? 'modificadas' : 'cargadas'), `${e.nombre} ${dmy(desde)} al ${dmy(hasta)} (${dias} días)`);
+    return { ok: true, id };
+  });
+  ruta('DELETE', '/api/vacaciones/<int>', (d, vid) => {
+    const v = q1('SELECT v.*, e.nombre FROM vacaciones v JOIN empleados e ON e.id = v.empleado_id WHERE v.id = ?', [+vid]);
+    if (v) { run("UPDATE vacaciones SET estado = 'BORRADO' WHERE id = ?", [+vid]); anotar('Vacaciones borradas', `${v.nombre} ${dmy(v.desde)} al ${dmy(v.hasta)}`); }
+    return { ok: true };
+  });
+  ruta('POST', '/api/vacaciones/<int>/reactivar', (d, vid) => {
+    const v = q1('SELECT * FROM vacaciones WHERE id = ?', [+vid]); if (!v) E('No existe');
+    const choca = q1("SELECT 1 FROM vacaciones WHERE empleado_id = ? AND estado = 'ACTIVO' AND id != ? AND desde <= ? AND hasta >= ?", [v.empleado_id, v.id, v.hasta, v.desde]);
+    if (choca) E('No se puede volver atrás: ya hay otras vacaciones en esas fechas');
+    run("UPDATE vacaciones SET estado = 'ACTIVO' WHERE id = ?", [+vid]); return { ok: true };
+  });
+  ruta('POST', '/api/empleados/<int>/vacaciones', (d, eid) => {
+    const e = q1('SELECT * FROM empleados WHERE id = ?', [+eid]); if (!e) E('No existe');
+    const n = Math.trunc(num(d.vac_dias)); if (!(n >= 0 && n <= 60)) E('Los días de vacaciones van de 0 a 60');
+    run('UPDATE empleados SET vac_dias = ?, ingreso = ? WHERE id = ?', [n, d.ingreso ? fechaOk(d.ingreso, 'fecha de ingreso') : '', +eid]);
+    return { ok: true };
   });
 
   /* ------------------------------------------------ PAGOS */

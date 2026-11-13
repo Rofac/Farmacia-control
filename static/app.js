@@ -234,6 +234,8 @@ const MENU = [
   { id: 'proveedores', t: 'Proveedores', i: 'edificio' },
   { id: 'gastos', t: 'Gastos', i: 'peso' },
   { id: 'sueldos', t: 'Sueldos', i: 'users' },
+  { id: 'turnos', t: 'Turnos de farmacia', i: 'guardia' },
+  { id: 'vacaciones', t: 'Vacaciones', i: 'playa' },
   { id: 'informes', t: 'Informes', i: 'chart' },
   { t: 'Datos', i: 'db', titulo: 'DATOS', sub: [
     { id: 'cuentas', t: 'Bancos y quién paga', i: 'card' },
