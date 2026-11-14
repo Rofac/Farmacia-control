@@ -10,6 +10,13 @@ Se abre "Cargar pago" con el comprobante adjunto. Si el comprobante es PDF, la a
 el N° de operación y, si lo reconoce, el proveedor (revisalo antes de guardar). Si es una imagen, escribís el importe.
 (Para que aparezca en Compartir la app tiene que estar INSTALADA. En iPhone no aparece.)
 
+NUEVO (v1.2): MIS EVENTOS EN EL CALENDARIO
+- "Anotar algo" (en Inicio, en Turnos de farmacia y al tocar un día): turno médico 🩺, trámite 📄, cumpleaños 🎂,
+  salida/evento 🎉, recordatorio 🔔 u otro 📌, con fecha, hora opcional y nota. Los cumpleaños se repiten todos los años.
+- Se ven en el Inicio ("Lo que tengo anotado", próximos 30 días), en el calendario del mes (el emoji en el día y la lista
+  del mes), en la semana y al tocar un día. "Guardar y al calendario" lo pasa al calendario del celular con aviso.
+- Quedan en la misma base, así que entran en la copia de seguridad. Sin activación: la app sigue siendo sólo tuya.
+
 NUEVO (v1.1): TURNOS DE FARMACIA Y VACACIONES
 - Turnos de farmacia: calendario por mes y por semana con la farmacia de turno de cada día; Roma y Roma II resaltadas.
   Viene cargada la rotación de 8 farmacias desde el 1/11/2026, confirmada hasta el 31/12/2027 (2027 confirmado el 13/11/2026: al abrirla se actualiza sola); después es

@@ -6,6 +6,12 @@ const faltaTxt = f => { const n = -diasDesde(f); return n === 0 ? 'hoy' : n === 
 const finMes = ym => sumarDias(sumarDias(ym + '-01', 32).slice(0, 8) + '01', -1);
 const lunesDe = f => sumarDias(f, -diaSemana(f));
 const nombreCorto = n => (n || '').split(/\s+/)[0];
+/* mis eventos: turno médico, trámite, cumpleaños… (anotaciones propias en el calendario) */
+const TIPOS_EV = [['medico', '🩺', 'Turno médico'], ['tramite', '📄', 'Trámite'], ['cumple', '🎂', 'Cumpleaños'], ['salida', '🎉', 'Salida / evento'], ['recordar', '🔔', 'Recordatorio'], ['otro', '📌', 'Otro']];
+const emojiEv = t => (TIPOS_EV.find(x => x[0] === t) || TIPOS_EV[5])[1];
+const filaEv = (e, conFecha) => `<div class="ev-f" data-ev="${e.id}"><span class="ev-e">${emojiEv(e.tipo)}</span><div class="ev-t"><b>${esc(e.titulo)}</b>
+  <small>${conFecha ? (e.cuando === hoy() ? 'Hoy' : DIAS_L[diaSemana(e.cuando)] + ' ' + dm(e.cuando)) + (e.hora ? ' · ' : '') : ''}${e.hora ? e.hora + ' h' : (conFecha ? '' : 'todo el día')}${e.nota ? ' · ' + esc(e.nota) : ''}</small></div>
+  ${conFecha ? `<span class="muted chico">${faltaTxt(e.cuando)}</span>` : ''}</div>`;
 const TU = { modo: 'mes', mes: hoy().slice(0, 7), lunes: lunesDe(hoy()), todas: true };
 try { TU.todas = localStorage.getItem('pag_turnos_todas') !== '0'; } catch (e) {}
 
@@ -16,6 +22,7 @@ P.turnos = async (main) => {
   const r = await api(`/api/turnos?desde=${desde}&hasta=${hasta}`);
   const re = () => ir('turnos');
   const vacDe = f => r.vacaciones.filter(v => v.desde <= f && v.hasta >= f);
+  const evDe = f => (r.eventos || []).filter(e => e.cuando === f);
   const enMes = r.dias.filter(x => TU.modo !== 'mes' || x.fecha.slice(0, 7) === TU.mes);
   const nuestras = enMes.filter(x => x.nuestra), cedidas = enMes.filter(x => x.cedida).length, tomadas = nuestras.filter(x => x.tomada).length;
   const porF = {}; nuestras.forEach(x => porF[x.nombre] = (porF[x.nombre] || 0) + 1);
@@ -30,6 +37,7 @@ P.turnos = async (main) => {
         ${x.cedida ? `<span class="f tachado">${esc(r.farmacias.find(z => z.id === x.oficial)?.corto || x.nombre_oficial)}</span>` : ''}
         ${x.nuestra || TU.todas || x.cedida ? `<span class="f">${esc(x.corto || x.nombre)}</span>` : ''}
         ${x.cambiado ? '<span class="tu-cam">⇄</span>' : ''}
+        ${evDe(x.fecha).length ? `<span class="tu-ev">${evDe(x.fecha).slice(0, 2).map(e => emojiEv(e.tipo)).join('')}${evDe(x.fecha).length > 2 ? '<sup>+' + (evDe(x.fecha).length - 2) + '</sup>' : ''}</span>` : ''}
         ${vs.length ? `<span class="tu-vac">${vs.map(v => `<i title="${esc(v.nombre)} de vacaciones">${esc(iniciales(v.nombre) || v.nombre.slice(0, 2))}</i>`).join('')}</span>` : ''}</div>`;
     }).join('')}</div>`;
   } else {
@@ -38,10 +46,11 @@ P.turnos = async (main) => {
         <div class="tu-sem-t">${x.nuestra ? `<span class="tu-marca">Guardia ${esc(x.nombre)}</span>${x.tomada ? ' <span class="pill naranja">cambio</span>' : ''}`
           : `<span class="muted">De turno:</span> ${esc(x.nombre)}${x.cedida ? ' <span class="pill rojo">cedida</span>' : ''}`}${x.estimado ? ' <span class="pill gris">a confirmar</span>' : ''}
           ${x.nota ? `<div class="muted chico">${esc(x.nota)}</div>` : ''}
-          ${vs.length ? `<div class="chico" style="margin-top:3px">${ico('playa')} De vacaciones: ${vs.map(v => esc(v.nombre)).join(', ')}</div>` : ''}</div></div>`; }).join('');
+          ${vs.length ? `<div class="chico" style="margin-top:3px">${ico('playa')} De vacaciones: ${vs.map(v => esc(v.nombre)).join(', ')}</div>` : ''}
+          ${evDe(x.fecha).map(e => `<div class="chico" style="margin-top:3px">${emojiEv(e.tipo)} ${e.hora ? '<b>' + e.hora + '</b> ' : ''}${esc(e.titulo)}</div>`).join('')}</div></div>`; }).join('');
   }
   main.innerHTML = cabecera('guardia', 'Turnos de farmacia', 'Qué farmacia está de turno cada día. Las nuestras, resaltadas.',
-    `<button class="btn" id="tuIcs">${ico('cal')} Al calendario del celular</button><button class="btn" id="tuLis">${ico('lista')} Listado de turnos</button>`) +
+    `<button class="btn verde" id="tuEv">${ico('plus')} Anotar algo</button><button class="btn" id="tuIcs">${ico('cal')} Al calendario del celular</button><button class="btn" id="tuLis">${ico('lista')} Listado de turnos</button>`) +
     `<div class="card tu-nav"><button class="btn" id="tuAnt">${ico('izq')}</button>
       <div class="tu-nav-t"><b>${TU.modo === 'mes' ? nombreMes(TU.mes) : 'Semana ' + tituloSem}</b>
         <small>${nuestras.length} guardia${nuestras.length === 1 ? '' : 's'} nuestra${nuestras.length === 1 ? '' : 's'}${Object.keys(porF).length ? ' · ' + Object.entries(porF).map(([n, k]) => `${esc(n)} ${k}`).join(' · ') : ''}${cedidas ? ` · ${cedidas} cedida${cedidas > 1 ? 's' : ''}` : ''}${tomadas ? ` · ${tomadas} tomada${tomadas > 1 ? 's' : ''}` : ''}</small></div>
@@ -51,7 +60,8 @@ P.turnos = async (main) => {
       <button class="btn chico" id="tuHoy">Hoy</button></div>
     ${hayEst ? `<div class="aviso">${ico('info')} Desde el ${dm(sumarDias(r.confirmado_hasta, 1))} es <b>estimado</b> siguiendo la rotación (rayado). Cuando salga el listado nuevo, confirmalo en "Listado de turnos".</div>` : ''}
     <div class="card" style="padding:${TU.modo === 'mes' ? '10px' : '6px 14px'}">${cuerpo}</div>
-    <div class="ayuda">Tocá un día para ver quién está de turno, cederle la guardia a otra farmacia o hacer un intercambio. ${TU.modo === 'mes' ? 'Las iniciales abajo son los empleados de vacaciones.' : ''}</div>`;
+    ${TU.modo === 'mes' ? (() => { const l = (r.eventos || []).filter(e => e.cuando.slice(0, 7) === TU.mes); return l.length ? `<div class="card"><h3>${ico('cal')} Mis eventos de ${MESES[+TU.mes.slice(5, 7) - 1].toLowerCase()}</h3>${l.map(e => filaEv(e, true)).join('')}</div>` : ''; })() : ''}
+    <div class="ayuda">Tocá un día para ver quién está de turno, anotar algo tuyo (turno médico, trámite, cumpleaños…), cederle la guardia a otra farmacia o hacer un intercambio. ${TU.modo === 'mes' ? 'Las iniciales abajo son los empleados de vacaciones.' : ''}</div>`;
   $('#tuAnt').onclick = () => { if (TU.modo === 'mes') TU.mes = sumarDias(TU.mes + '-01', -1).slice(0, 7); else TU.lunes = sumarDias(TU.lunes, -7); re(); };
   $('#tuSig').onclick = () => { if (TU.modo === 'mes') TU.mes = sumarDias(finMes(TU.mes), 1).slice(0, 7); else TU.lunes = sumarDias(TU.lunes, 7); re(); };
   $('#tuHoy').onclick = () => { TU.mes = hoy().slice(0, 7); TU.lunes = lunesDe(hoy()); re(); };
@@ -59,7 +69,11 @@ P.turnos = async (main) => {
   $$('[data-todas]', main).forEach(b => b.onclick = () => { TU.todas = b.dataset.todas === '1'; try { localStorage.setItem('pag_turnos_todas', TU.todas ? '1' : '0'); } catch (e) {} re(); });
   $('#tuLis').onclick = () => listadoTurnos(re);
   $('#tuIcs').onclick = () => guardiasAlCalendario();
-  main.onclick = e => { const c = e.target.closest('[data-f]'); if (c) diaTurno(c.dataset.f, re); };
+  $('#tuEv').onclick = () => cargarEvento({ fecha: TU.modo === 'mes' && TU.mes !== hoy().slice(0, 7) ? TU.mes + '-01' : hoy() }, re);
+  main.onclick = e => {
+    const ev = e.target.closest('[data-ev]'); if (ev) return editarEvento(+ev.dataset.ev, re);
+    const c = e.target.closest('[data-f]'); if (c) diaTurno(c.dataset.f, re);
+  };
 };
 
 /* un día: quién está de turno, cambiar la guardia, quién está de vacaciones */
@@ -73,9 +87,13 @@ async function diaTurno(f, luego) {
   if (x.nota) det += ` <i>“${esc(x.nota)}”</i>`;
   const m = modal(esc(fechaLarga(f)), `<div class="tu-dia ${x.nuestra ? 'nuestra' : ''}"><small>${x.nuestra ? 'Tenemos guardia' : 'Está de turno'}</small>
       <b>${esc(x.nombre)}</b>${det ? `<div class="chico" style="margin-top:4px">${det}</div>` : ''}${x.estimado ? '<div><span class="pill gris">a confirmar</span></div>' : ''}</div>
-    ${r.vacaciones.length ? `<div class="aviso" style="margin-top:12px">${ico('playa')} De vacaciones: <b>${r.vacaciones.map(v => esc(v.nombre)).join(', ')}</b></div>` : ''}`,
+    ${r.vacaciones.length ? `<div class="aviso" style="margin-top:12px">${ico('playa')} De vacaciones: <b>${r.vacaciones.map(v => esc(v.nombre)).join(', ')}</b></div>` : ''}
+    <div class="ev-dia"><div class="inl" style="justify-content:space-between"><b>Mis eventos</b><button class="btn chico verde" id="tdE">${ico('plus')} Anotar algo</button></div>
+      ${(r.eventos || []).map(e => filaEv(e, false)).join('') || '<div class="muted chico" style="padding:6px 0">Nada anotado este día</div>'}</div>`,
     `${x.cambiado || x.nota ? `<button class="btn" id="tdO">Volver al listado</button>` : ''}<button class="btn" data-cerrar>Cerrar</button><button class="btn pri" id="tdC">${ico('lapiz')} Cambiar guardia</button>`, '', 'guardia');
   $('#tdC', m).onclick = () => { m.cerrar(); cambiarGuardia(f, r, luego); };
+  $('#tdE', m).onclick = () => { m.cerrar(); cargarEvento({ fecha: f }, luego); };
+  $$('[data-ev]', m).forEach(el => el.onclick = () => { m.cerrar(); editarEvento(+el.dataset.ev, luego); });
   if ($('#tdO', m)) $('#tdO', m).onclick = async () => { try { await api('/api/turnos/cambio/' + f, undefined, 'DELETE'); m.cerrar(); toast('Volvió a como está en el listado'); luego && luego(); } catch (e) { fallo(e); } };
 }
 
@@ -286,3 +304,45 @@ function toastDeshacer(msg, fn) {
     } catch (e) { console.warn(e); }
   };
 })();
+
+/* ---------------------------------------------------------------- MIS EVENTOS: anotar / modificar */
+async function editarEvento(id, luego) {
+  try { cargarEvento(await api('/api/eventos/' + id), luego); } catch (e) { fallo(e); }
+}
+function cargarEvento(ev, luego) {
+  let tipo = ev.tipo || 'medico';
+  const m = modal(ev.id ? 'Mi evento' : 'Anotar algo', `<label>¿Qué es?</label><div class="ev-tipos">${TIPOS_EV.map(([v, e, t]) => `<button type="button" data-t="${v}" class="${tipo === v ? 'act' : ''}">${e} ${t}</button>`).join('')}</div>
+    <div class="g" style="margin-top:14px"><div class="full"><label>Título</label><input id="evT" value="${esc(ev.titulo || '')}" placeholder="Ej.: Dentista, Cumple de mamá, Pagar el auto…" maxlength="80" autocomplete="off"></div>
+      <div><label>Fecha</label><input type="date" id="evF" value="${esc(ev.fecha || hoy())}"></div>
+      <div><label>Hora (opcional)</label><input type="time" id="evH" value="${esc(ev.hora || '')}"></div>
+      <div class="full"><label class="ev-chk"><input type="checkbox" id="evA" ${ev.anual ? 'checked' : ''}> Se repite todos los años <span class="muted chico">(cumpleaños, aniversarios)</span></label></div>
+      <div class="full"><label>Nota (opcional)</label><textarea id="evN" rows="2" maxlength="400" placeholder="Dirección, qué llevar, teléfono…">${esc(ev.nota || '')}</textarea></div></div>`,
+    `${ev.id ? `<button class="btn rojo" id="evB">${ico('trash')} Borrar</button>` : ''}<button class="btn" id="evC">${ico('cal')} Guardar y al calendario</button><button class="btn pri" id="evOk">${ico('check')} Guardar</button>`, '', 'cal');
+  $$('.ev-tipos button', m).forEach(b => b.onclick = () => { tipo = b.dataset.t; $$('.ev-tipos button', m).forEach(x => x.classList.toggle('act', x === b)); if (tipo === 'cumple') $('#evA', m).checked = true; });
+  const guardar = async alCal => {
+    const d = { id: ev.id, tipo, titulo: $('#evT', m).value, fecha: $('#evF', m).value, hora: $('#evH', m).value, anual: $('#evA', m).checked ? 1 : 0, nota: $('#evN', m).value };
+    try { await api('/api/eventos', d); m.cerrar(); toast(ev.id ? 'Evento guardado' : 'Anotado'); luego && luego(); if (alCal) eventoAlCalendario(d); } catch (e) { fallo(e); }
+  };
+  $('#evOk', m).onclick = () => guardar(false);
+  $('#evC', m).onclick = () => guardar(true);
+  if ($('#evB', m)) $('#evB', m).onclick = async () => {
+    if (!await confirmar(`¿Borrar “${esc(ev.titulo)}”?`, 'Borrar')) return;
+    try { const x = await api('/api/eventos/' + ev.id, undefined, 'DELETE'); m.cerrar(); luego && luego();
+      toastDeshacer('Evento borrado', async () => { const b = x.borrado; await api('/api/eventos', { tipo: b.tipo, titulo: b.titulo, fecha: b.fecha, hora: b.hora, anual: b.anual, nota: b.nota }); luego && luego(); }); } catch (e) { fallo(e); }
+  };
+  setTimeout(() => { if (!ev.id) $('#evT', m).focus(); }, 60);
+}
+function eventoAlCalendario(e) {
+  let fecha = e.fecha;
+  if (e.anual) { for (let f = hoy(), k = 0; k < 400; f = sumarDias(f, 1), k++) { const md = e.fecha.slice(5); if (f.slice(5) === md || (md === '02-29' && f.slice(5) === '02-28' && +f.slice(0, 4) % 4)) { fecha = f; break; } } }
+  const sello = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z', s = f => f.replace(/-/g, ''), tx = t => String(t || '').replace(/\\/g, '\\\\').replace(/[,;]/g, m => '\\' + m).replace(/\n/g, '\\n');
+  const titulo = emojiEv(e.tipo) + ' ' + e.titulo, L = ['BEGIN:VEVENT', `UID:evento-${Date.now()}@rofac-pagos`, 'DTSTAMP:' + sello, 'SUMMARY:' + tx(titulo)];
+  if (e.hora) { const [h, mi] = e.hora.split(':').map(Number), fin = Math.min(h * 60 + mi + 60, 23 * 60 + 59), d2 = n => String(n).padStart(2, '0');
+    L.push(`DTSTART:${s(fecha)}T${d2(h)}${d2(mi)}00`, `DTEND:${s(fecha)}T${d2(Math.floor(fin / 60))}${d2(fin % 60)}00`); }
+  else L.push('DTSTART;VALUE=DATE:' + s(fecha), 'DTEND;VALUE=DATE:' + s(sumarDias(fecha, 1)));
+  if (e.anual) L.push('RRULE:FREQ=YEARLY');
+  if (e.nota) L.push('DESCRIPTION:' + tx(e.nota));
+  L.push('BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + tx(titulo), 'TRIGGER:' + (e.hora ? '-PT2H' : '-PT15H'), 'END:VALARM', 'END:VEVENT');
+  const txt = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//RoFac//Pagos Farmacia//ES', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', ...L, 'END:VCALENDAR'].join('\r\n') + '\r\n';
+  descargarArchivo(new Blob([txt], { type: 'text/calendar' }), 'evento.ics', titulo);
+}

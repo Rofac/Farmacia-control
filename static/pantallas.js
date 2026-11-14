@@ -13,6 +13,8 @@ P.principal = async (main) => {
       <div class="kpi" style="--c:var(--turquesa)"><small>Pagado en ${MESES[+hoy().slice(5, 7) - 1].toLowerCase()}</small><b>${money((d.mes.PROVEEDOR || 0) + (d.mes.GASTO || 0) + (d.mes.SUELDO || 0))}</b>
         <div class="det">Proveedores ${money0(d.mes.PROVEEDOR || 0)} · gastos ${money0(d.mes.GASTO || 0)} · sueldos ${money0(d.mes.SUELDO || 0)}</div></div></div>
     ${d.sin_comprobante ? `<div class="aviso" style="margin-bottom:12px">${ico('clip')} Hay <b>${d.sin_comprobante}</b> pago${d.sin_comprobante === 1 ? '' : 's'} de los últimos 60 días sin comprobante adjunto. <a href="#" id="inSC">Ver</a></div>` : ''}
+    <div class="card ev-ini"><div class="inl" style="justify-content:space-between"><h3 style="margin:0">${ico('cal')} Lo que tengo anotado</h3><button class="btn chico verde" id="inEv">${ico('plus')} Anotar algo</button></div>
+      ${d.eventos.map(e => filaEv(e, true)).join('') || '<div class="muted chico" style="padding:8px 0 2px">Nada anotado para los próximos 30 días</div>'}</div>
     <h3 class="sep-t">${ico('edificio')} Para pagar (próximos 7 días)</h3>
     <div class="prov-grid">${d.proveedores.map(p => `<div class="card prov-c" data-p="${p.id}"><div class="inl" style="justify-content:space-between"><b style="font-size:16px">${esc(p.nombre)}</b>
         ${p.vencido > 0.009 ? '<span class="pill rojo">Vencido</span>' : p.vence_semana > 0.009 ? '<span class="pill naranja">Vence en 7 días</span>' : p.saldo > 0.009 ? '' : '<span class="pill ATENDIDO">Al día</span>'}</div>
@@ -34,7 +36,9 @@ P.principal = async (main) => {
   $('#inP').onclick = () => cargarPago({}, re);
   $('#inR').onclick = () => cargarResumen({}, re);
   if ($('#inSC')) $('#inSC').onclick = e => { e.preventDefault(); sinComprobante(); };
+  $('#inEv').onclick = () => cargarEvento({ fecha: hoy() }, re);
   main.onclick = async e => {
+    const ev = e.target.closest('[data-ev]'); if (ev) return editarEvento(+ev.dataset.ev, re);
     const v = e.target.closest('[data-ver]'); if (v) return verArchivo(v.dataset.ver);
     const pp = e.target.closest('[data-pp]'); if (pp) return cargarPago({ tipo: 'PROVEEDOR', proveedor_id: +pp.dataset.pp }, re);
     const rr = e.target.closest('[data-rr]'); if (rr) return cargarResumen({ proveedor_id: +rr.dataset.rr }, re);

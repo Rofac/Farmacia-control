@@ -721,3 +721,17 @@ tr.demorado td { background:rgba(226,59,74,.06); }
 .va-n small { display:block; font-size:11px; color:var(--txt2); font-weight:700; } .va-n b { font-size:22px; }
 .va-f { cursor:pointer; } .va-f svg.i { width:15px; height:15px; color:var(--txt2); }
 @media (max-width:600px) { .tu-c { min-height:60px; } .tu-c .f { font-size:9.5px; } .tu-c.nuestra .f { font-size:10px; } }
+
+/* ---------- mis eventos (turno médico, trámite, cumpleaños…) */
+.tu-ev { font-size:11px; line-height:1; margin-top:1px; } .tu-ev sup { font-size:8px; font-weight:800; color:var(--txt2); }
+.ev-f { display:flex; align-items:center; gap:10px; padding:9px 0; border-top:1px solid var(--borde); cursor:pointer; }
+.ev-f:first-of-type { border-top:0; }
+.ev-e { font-size:20px; width:28px; text-align:center; flex:none; }
+.ev-t { flex:1; min-width:0; } .ev-t b { font-weight:700; } .ev-t small { display:block; color:var(--txt2); font-size:12.5px; }
+.ev-dia { margin-top:14px; padding-top:12px; border-top:1px solid var(--borde); }
+.ev-ini { margin-bottom:14px; } .ev-ini .ev-f:first-of-type { border-top:1px solid var(--borde); margin-top:8px; }
+.ev-tipos { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+.ev-tipos button { border:1.5px solid var(--borde); background:var(--card); color:var(--txt); border-radius:22px; padding:8px 13px; font:inherit; font-size:14px; cursor:pointer; }
+.ev-tipos button.act { background:var(--pri); border-color:var(--pri); color:#fff; }
+.ev-chk { display:flex !important; align-items:center; gap:8px; flex-wrap:wrap; cursor:pointer; text-transform:none !important; letter-spacing:0 !important; font-size:14.5px !important; font-weight:500 !important; color:var(--txt) !important; }
+.ev-chk input { width:18px; height:18px; }

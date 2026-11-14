@@ -44,7 +44,10 @@ CREATE TABLE IF NOT EXISTS turno_listados (desde TEXT PRIMARY KEY, orden TEXT NO
 CREATE TABLE IF NOT EXISTS turno_cambios (fecha TEXT PRIMARY KEY, farmacia TEXT NOT NULL, nota TEXT DEFAULT '', par TEXT DEFAULT '', creado TEXT);
 CREATE TABLE IF NOT EXISTS vacaciones (id INTEGER PRIMARY KEY AUTOINCREMENT, empleado_id INTEGER NOT NULL REFERENCES empleados(id), desde TEXT NOT NULL, hasta TEXT NOT NULL,
   dias INTEGER NOT NULL, anio INTEGER NOT NULL, adelanto INTEGER DEFAULT 0, notas TEXT DEFAULT '', estado TEXT DEFAULT 'ACTIVO', creado TEXT);
-CREATE INDEX IF NOT EXISTS idx_vac ON vacaciones(empleado_id, anio);`;
+CREATE INDEX IF NOT EXISTS idx_vac ON vacaciones(empleado_id, anio);
+CREATE TABLE IF NOT EXISTS eventos (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT NOT NULL, hora TEXT DEFAULT '', tipo TEXT DEFAULT 'recordar', titulo TEXT NOT NULL,
+  nota TEXT DEFAULT '', anual INTEGER DEFAULT 0, creado TEXT);
+CREATE INDEX IF NOT EXISTS idx_eventos ON eventos(fecha);`;
   const MIGRACIONES = {
     empleados: [['valor_dia', 'REAL DEFAULT 0'], ['dias_semana', 'REAL DEFAULT 7'], ['cena', 'REAL DEFAULT 0'], ['saldo_inicial', 'REAL DEFAULT 0'], ['cuenta_desde', "TEXT DEFAULT ''"],
       ['vac_dias', 'INTEGER DEFAULT 14'], ['ingreso', "TEXT DEFAULT ''"]],
@@ -419,10 +422,46 @@ CREATE INDEX IF NOT EXISTS idx_vac ON vacaciones(empleado_id, anio);`;
     return out;
   }
   const vacEntre = (desde, hasta) => q("SELECT v.*, e.nombre FROM vacaciones v JOIN empleados e ON e.id = v.empleado_id WHERE v.estado = 'ACTIVO' AND v.desde <= ? AND v.hasta >= ? ORDER BY v.desde, e.nombre COLLATE NOCASE", [hasta, desde]);
+  /* ---- MIS EVENTOS (turno médico, trámite, cumpleaños…): anotaciones propias en el calendario */
+  const TIPOS_EV = ['medico', 'tramite', 'cumple', 'salida', 'recordar', 'otro'];
+  const bisiesto = a => a % 4 === 0 && (a % 100 !== 0 || a % 400 === 0);
+  function caeEl(e, f) {             // los anuales (cumpleaños) se repiten cada año; el 29/2 cae el 28/2 si no es bisiesto
+    if (e.fecha === f) return true;
+    if (!e.anual || f < e.fecha) return false;
+    const md = e.fecha.slice(5);
+    return f.slice(5) === (md === '02-29' && !bisiesto(+f.slice(0, 4)) ? '02-28' : md);
+  }
+  function eventosEntre(desde, hasta) {
+    const l = q('SELECT * FROM eventos WHERE fecha <= ? AND (anual = 1 OR fecha >= ?)', [hasta, desde]), out = [];
+    for (let f = desde, k = 0; f <= hasta && k < 800; f = masDias(f, 1), k++) for (const e of l) if (caeEl(e, f)) out.push({ ...e, cuando: f });
+    return out.sort((a, b) => (a.cuando + (a.hora || '99')).localeCompare(b.cuando + (b.hora || '99')) || a.titulo.localeCompare(b.titulo));
+  }
+  ruta('GET', '/api/eventos', (d, args) => {
+    const desde = fechaOk(args.get('desde') || hoy()), hasta = fechaOk(args.get('hasta') || masDias(desde, 30));
+    if (entreDias(desde, hasta) > 400 || hasta < desde) E('Rango de fechas inválido');
+    return eventosEntre(desde, hasta);
+  });
+  ruta('POST', '/api/eventos', d => {
+    const titulo = txt(d.titulo, 80); if (!titulo) E('Escribí qué es (ej. Dentista, Cumple de mamá)');
+    const fecha = fechaOk(d.fecha), hora = String(d.hora || '').trim();
+    if (hora && !/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) E('Hora inválida');
+    const par = [fecha, hora, TIPOS_EV.includes(d.tipo) ? d.tipo : 'otro', titulo, String(d.nota || '').trim().slice(0, 400), d.anual ? 1 : 0];
+    const id = +d.id || 0;
+    if (id) { if (!q1('SELECT 1 FROM eventos WHERE id = ?', [id])) E('No se encontró ese evento'); run('UPDATE eventos SET fecha=?, hora=?, tipo=?, titulo=?, nota=?, anual=? WHERE id = ?', [...par, id]); anotar('Evento modificado', titulo); return { ok: true, id }; }
+    run('INSERT INTO eventos(fecha, hora, tipo, titulo, nota, anual, creado) VALUES (?,?,?,?,?,?,?)', [...par, ahora()]);
+    anotar('Evento anotado', titulo + ' ' + dmy(fecha));
+    return { ok: true, id: val('SELECT last_insert_rowid()') };
+  });
+  ruta('GET', '/api/eventos/<int>', (d, id) => q1('SELECT * FROM eventos WHERE id = ?', [+id]) || E('No se encontró ese evento'));
+  ruta('DELETE', '/api/eventos/<int>', (d, id) => {
+    const e = q1('SELECT * FROM eventos WHERE id = ?', [+id]); if (!e) E('No se encontró ese evento');
+    run('DELETE FROM eventos WHERE id = ?', [+id]); anotar('Evento borrado', e.titulo); return { ok: true, borrado: e };
+  });
+
   ruta('GET', '/api/turnos', (d, args) => {
     const desde = fechaOk(args.get('desde') || hoy().slice(0, 8) + '01'), hasta = fechaOk(args.get('hasta') || masDias(desde, 41));
     if (entreDias(desde, hasta) > 400 || hasta < desde) E('Rango de fechas inválido');
-    return { dias: diasT(desde, hasta), farmacias: farmaciasT(), listados: listadosT(), confirmado_hasta: confirmadoHasta(), vacaciones: vacEntre(desde, hasta) };
+    return { dias: diasT(desde, hasta), farmacias: farmaciasT(), listados: listadosT(), confirmado_hasta: confirmadoHasta(), vacaciones: vacEntre(desde, hasta), eventos: eventosEntre(desde, hasta) };
   });
   ruta('GET', '/api/turnos/proximas', (d, args) => {
     const n = Math.min(20, Math.trunc(num(args.get('n') || 5)) || 5), h = hoy(), l = diasT(h, masDias(h, 120));
@@ -711,7 +750,7 @@ CREATE INDEX IF NOT EXISTS idx_vac ON vacaciones(empleado_id, anio);`;
     const totMes = Object.fromEntries(q("SELECT tipo, SUM(importe) AS t FROM pagos WHERE estado = 'ACTIVO' AND substr(fecha,1,7) = ? GROUP BY tipo", [mes]).map(r => [r.tipo, r2(r.t)]));
     const sinComp = val("SELECT COUNT(*) FROM pagos p WHERE estado = 'ACTIVO' AND medio != 'EFECTIVO' AND fecha >= ? AND NOT EXISTS (SELECT 1 FROM adjuntos a WHERE a.pago_id = p.id)", [masDias(h, -60)]);
     const ultimos = q(sqlPagos({})[0] + ' ORDER BY p.creado DESC, p.id DESC LIMIT 8');
-    return { proveedores: paraPagar, deuda, vence_semana: r2(sum(paraPagar, p => p.vence_semana)), hasta_semana: hs, sin_acreditar: sinAcr, dias_aviso: dias, mes: totMes, sin_comprobante: sinComp, ultimos };
+    return { eventos: eventosEntre(h, masDias(h, 30)).slice(0, 6), proveedores: paraPagar, deuda, vence_semana: r2(sum(paraPagar, p => p.vence_semana)), hasta_semana: hs, sin_acreditar: sinAcr, dias_aviso: dias, mes: totMes, sin_comprobante: sinComp, ultimos };
   });
   ruta('GET', '/api/avisos', () => {
     const out = [], dias = Math.trunc(num(getConfig().dias_aviso_acreditar || 5));
