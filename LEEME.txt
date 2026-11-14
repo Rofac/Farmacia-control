@@ -12,7 +12,7 @@ el N° de operación y, si lo reconoce, el proveedor (revisalo antes de guardar)
 
 NUEVO (v1.1): TURNOS DE FARMACIA Y VACACIONES
 - Turnos de farmacia: calendario por mes y por semana con la farmacia de turno de cada día; Roma y Roma II resaltadas.
-  Viene cargada la rotación de 8 farmacias desde el 1/11/2026, confirmada hasta el 31/12/2026; después es
+  Viene cargada la rotación de 8 farmacias desde el 1/11/2026, confirmada hasta el 31/12/2027 (2027 confirmado el 13/11/2026: al abrirla se actualiza sola); después es
   "estimado" (rayado) hasta que se cargue el listado nuevo ("Listado de turnos").
   Tocando un día: "Cambiar guardia" (cederla a otra farmacia, tomar una, o intercambio: la cedemos y nos devuelven otro día)
   y "Volver al listado". "Al calendario del celular" pasa las guardias al calendario con aviso la noche anterior.

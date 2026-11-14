@@ -10,7 +10,7 @@ const SRV = (() => {
   const DEFAULT_CONFIG = {
     nombre_negocio: 'Farmacia Roma',
     categorias_gasto: 'Alquiler,Internet,Luz,Agua,Gas,Teléfono,Impuestos,Contador,Limpieza,Mantenimiento,Seguro,Personales,Otros',
-    dias_aviso_acreditar: '5', sueldo_valor_dia: '24000', sueldo_dias: '7', sueldo_cena: '12000', celular: '0', turnos_confirmado_hasta: '2026-12-31',
+    dias_aviso_acreditar: '5', sueldo_valor_dia: '24000', sueldo_dias: '7', sueldo_cena: '12000', celular: '0', turnos_confirmado_hasta: '2027-12-31',
   };
   const PROVEEDORES_INICIALES = ['Droguería del Sud', 'Cofaral', 'Monroe Americana'];
   /* rotación de turnos (cada 8 días se repite), empieza el 1/11/2026 con Cristal */
@@ -146,6 +146,10 @@ CREATE INDEX IF NOT EXISTS idx_vac ON vacaciones(empleado_id, anio);`;
         run('INSERT OR IGNORE INTO turno_listados(desde, orden) VALUES (?, ?)', ['2026-11-01', JSON.stringify(TURNOS_INICIALES.map(x => x[0]))]);
       }
       run("INSERT INTO config(clave, valor) VALUES ('turnos_iniciales', '1')");
+    }
+    if (!q1("SELECT 1 FROM config WHERE clave = 'turnos_2027'")) {     // listado 2027 confirmado (13/11/2026): si seguía con la fecha original, pasa al 31/12/2027
+      run("UPDATE config SET valor = '2027-12-31' WHERE clave = 'turnos_confirmado_hasta' AND valor = '2026-12-31'");
+      run("INSERT INTO config(clave, valor) VALUES ('turnos_2027', '1')");
     }
   }
   async function abrir() {
@@ -395,7 +399,7 @@ CREATE INDEX IF NOT EXISTS idx_vac ON vacaciones(empleado_id, anio);`;
   const farmaciasT = () => q('SELECT * FROM turno_farmacias ORDER BY orden, nombre COLLATE NOCASE');
   const farmaciaT = id => q1('SELECT * FROM turno_farmacias WHERE id = ?', [id]);
   const listadosT = () => q('SELECT * FROM turno_listados ORDER BY desde').map(r => ({ desde: r.desde, orden: JSON.parse(r.orden || '[]') }));
-  const confirmadoHasta = () => getConfig().turnos_confirmado_hasta || '2026-12-31';
+  const confirmadoHasta = () => getConfig().turnos_confirmado_hasta || '2027-12-31';
   function oficialT(f, ls) {
     ls = ls || listadosT(); if (!ls.length) return null;
     let r = ls[0]; for (const x of ls) if (x.desde <= f) r = x;
