@@ -12,6 +12,10 @@ P.principal = async (main) => {
       <div class="kpi" style="--c:var(--violeta)" data-ir="pagos" data-a="sinacreditar"><small>Pagado y todavía sin acreditar</small><b>${money(tv)}</b><div class="det">${d.sin_acreditar.length} pago${d.sin_acreditar.length === 1 ? '' : 's'}</div></div>
       <div class="kpi" style="--c:var(--turquesa)"><small>Pagado en ${MESES[+hoy().slice(5, 7) - 1].toLowerCase()}</small><b>${money((d.mes.PROVEEDOR || 0) + (d.mes.GASTO || 0) + (d.mes.SUELDO || 0))}</b>
         <div class="det">Proveedores ${money0(d.mes.PROVEEDOR || 0)} · gastos ${money0(d.mes.GASTO || 0)} · sueldos ${money0(d.mes.SUELDO || 0)}</div></div></div>
+    ${d.cheques && d.cheques.semana_n ? `<div class="card ch-ini" data-ir="cheques" style="cursor:pointer;border-left:5px solid ${d.cheques.hoy.length ? 'var(--rojo)' : 'var(--naranja)'}">
+      <div class="inl" style="justify-content:space-between"><b>${ico('cheque')} Cheques</b><span class="muted chico">En 7 días se debitan <b>${money0(d.cheques.semana)}</b> (${d.cheques.semana_n})</span></div>
+      ${d.cheques.hoy.map(c => `<div class="pend-r"><span><b class="${c.dias < 0 ? 'neg' : ''}">${c.dias < 0 ? '¿Ya se debitó? (' + dm(c.fecha_pago) + ')' : c.dias === 0 ? 'HOY' : 'Mañana'}</b> · ${esc(c.quien)}${c.numero ? ' · N° ' + esc(c.numero) : ''}</span><b>${money0(c.importe)}</b></div>`).join('')
+        || '<div class="muted chico" style="margin-top:4px">Nada para hoy ni mañana.</div>'}</div>` : ''}
     ${d.sin_comprobante ? `<div class="aviso" style="margin-bottom:12px">${ico('clip')} Hay <b>${d.sin_comprobante}</b> pago${d.sin_comprobante === 1 ? '' : 's'} de los últimos 60 días sin comprobante adjunto. <a href="#" id="inSC">Ver</a></div>` : ''}
     <div class="card ev-ini"><div class="inl" style="justify-content:space-between"><h3 style="margin:0">${ico('cal')} Lo que tengo anotado</h3><button class="btn chico verde" id="inEv">${ico('plus')} Anotar algo</button></div>
       ${d.eventos.map(e => filaEv(e, true)).join('') || '<div class="muted chico" style="padding:8px 0 2px">Nada anotado para los próximos 30 días</div>'}</div>

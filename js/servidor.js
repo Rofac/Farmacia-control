@@ -47,7 +47,11 @@ CREATE TABLE IF NOT EXISTS vacaciones (id INTEGER PRIMARY KEY AUTOINCREMENT, emp
 CREATE INDEX IF NOT EXISTS idx_vac ON vacaciones(empleado_id, anio);
 CREATE TABLE IF NOT EXISTS eventos (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT NOT NULL, hora TEXT DEFAULT '', tipo TEXT DEFAULT 'recordar', titulo TEXT NOT NULL,
   nota TEXT DEFAULT '', anual INTEGER DEFAULT 0, creado TEXT);
-CREATE INDEX IF NOT EXISTS idx_eventos ON eventos(fecha);`;
+CREATE INDEX IF NOT EXISTS idx_eventos ON eventos(fecha);
+CREATE TABLE IF NOT EXISTS cheques (id INTEGER PRIMARY KEY AUTOINCREMENT, tipo TEXT DEFAULT 'FISICO', numero TEXT DEFAULT '', cuenta_id INTEGER REFERENCES cuentas(id),
+  proveedor_id INTEGER REFERENCES proveedores(id), a_quien TEXT DEFAULT '', importe REAL NOT NULL, emision TEXT NOT NULL, fecha_pago TEXT NOT NULL,
+  estado TEXT DEFAULT 'PENDIENTE', debitado_fecha TEXT DEFAULT '', pago_id INTEGER REFERENCES pagos(id), notas TEXT DEFAULT '', anulado_motivo TEXT DEFAULT '', creado TEXT);
+CREATE INDEX IF NOT EXISTS idx_cheques ON cheques(estado, fecha_pago);`;
   const MIGRACIONES = {
     empleados: [['valor_dia', 'REAL DEFAULT 0'], ['dias_semana', 'REAL DEFAULT 7'], ['cena', 'REAL DEFAULT 0'], ['saldo_inicial', 'REAL DEFAULT 0'], ['cuenta_desde', "TEXT DEFAULT ''"],
       ['vac_dias', 'INTEGER DEFAULT 14'], ['ingreso', "TEXT DEFAULT ''"]],
@@ -627,6 +631,8 @@ CREATE INDEX IF NOT EXISTS idx_eventos ON eventos(fecha);`;
   ruta('GET', '/api/pagos/<int>', (d, gid) => {
     const p = q1(sqlPagos({ estado: 'todos' })[0] + ' AND p.id = ?', [+gid]); if (!p) throw Object.assign(new Error('No existe'), { status: 404 });
     p.adjuntos = q('SELECT * FROM adjuntos WHERE pago_id = ? ORDER BY id', [+gid]);
+    const ch = q1('SELECT * FROM cheques WHERE pago_id = ?', [+gid]);
+    if (ch) Object.assign(p, { cheque_id: ch.id, cheque_numero: ch.numero, cheque_fecha_pago: ch.fecha_pago, cheque_estado: ch.estado });
     return p;
   });
   ruta('POST', '/api/pagos', d => {
@@ -652,6 +658,16 @@ CREATE INDEX IF NOT EXISTS idx_eventos ON eventos(fecha);`;
     } else gid = run('INSERT INTO pagos(tipo, fecha, importe, medio, cuenta_id, proveedor_id, categoria, empleado_id, periodo, concepto, operacion, notas, acreditado, acreditado_fecha, creado, adelanto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
       [...par, acr, acr ? hoy() : '', ahora(), adel]);
     anotar('Pago ' + (d.id ? 'modificado' : 'cargado'), `${tipo.toLowerCase()} ${prov ? prov.nombre : emp ? emp.nombre : cat} ${dmy(f)} ${moneyTxt(imp)}`);
+    /* pagado con cheque o eCheq: queda también en la sección Cheques (unido al pago) */
+    const ch = q1('SELECT * FROM cheques WHERE pago_id = ?', [gid]);
+    if (medio === 'CHEQUE' || medio === 'ECHEQ') {
+      const fp = d.cheque_fecha_pago ? fechaOk(d.cheque_fecha_pago) : (ch ? ch.fecha_pago : f);
+      const nro = d.cheque_numero !== undefined ? txt(d.cheque_numero, 30) : (ch ? ch.numero : '');
+      const quien = prov ? '' : emp ? emp.nombre : cat;
+      const parC = [medio === 'ECHEQ' ? 'ECHEQ' : 'FISICO', nro, cuentaId, prov ? prov.id : null, quien, imp, f, fp];
+      if (ch) run('UPDATE cheques SET tipo=?, numero=?, cuenta_id=?, proveedor_id=?, a_quien=?, importe=?, emision=?, fecha_pago=? WHERE id = ?', [...parC, ch.id]);
+      else run('INSERT INTO cheques(tipo, numero, cuenta_id, proveedor_id, a_quien, importe, emision, fecha_pago, pago_id, creado) VALUES (?,?,?,?,?,?,?,?,?,?)', [...parC, gid, ahora()]);
+    } else if (ch && ch.estado === 'PENDIENTE') run("UPDATE cheques SET estado = 'ANULADO', anulado_motivo = 'El pago se cambió a otro medio' WHERE id = ?", [ch.id]);
     return { ok: true, id: gid };
   });
   ruta('POST', '/api/pagos/<int>/acreditado', (d, gid) => {
@@ -663,10 +679,90 @@ CREATE INDEX IF NOT EXISTS idx_eventos ON eventos(fecha);`;
     const motivo = txt(d.motivo, 200); if (motivo.length < 3) E('Escribí el motivo');
     const p = q1('SELECT * FROM pagos WHERE id = ?', [+gid]); if (!p || p.estado !== 'ACTIVO') E('El pago no existe o ya estaba anulado');
     run("UPDATE pagos SET estado = 'ANULADO', anulado_motivo = ? WHERE id = ?", [motivo, +gid]);
+    run("UPDATE cheques SET estado = 'ANULADO', anulado_motivo = ? WHERE pago_id = ? AND estado = 'PENDIENTE'", ['Se anuló el pago: ' + motivo, +gid]);
     anotar('Pago ANULADO', `#${gid} ${dmy(p.fecha)} ${moneyTxt(p.importe)}: ${motivo}`);
     return { ok: true };
   });
-  ruta('POST', '/api/pagos/<int>/reactivar', (d, gid) => { run("UPDATE pagos SET estado = 'ACTIVO', anulado_motivo = '' WHERE id = ?", [+gid]); return { ok: true }; });
+  ruta('POST', '/api/pagos/<int>/reactivar', (d, gid) => { run("UPDATE pagos SET estado = 'ACTIVO', anulado_motivo = '' WHERE id = ?", [+gid]);
+    run("UPDATE cheques SET estado = 'PENDIENTE', anulado_motivo = '' WHERE pago_id = ? AND estado = 'ANULADO'", [+gid]); return { ok: true }; });
+
+  /* ------------------------------------------------ CHEQUES (los que doy yo: físicos y eCheq) */
+  const SQL_CH = 'SELECT ch.*, c.nombre AS cuenta, v.nombre AS proveedor, COALESCE(v.nombre, ch.a_quien) AS quien, p.estado AS pago_estado FROM cheques ch ' +
+    'LEFT JOIN cuentas c ON c.id = ch.cuenta_id LEFT JOIN proveedores v ON v.id = ch.proveedor_id LEFT JOIN pagos p ON p.id = ch.pago_id';
+  ruta('GET', '/api/cheques', (d, args) => {
+    const h = hoy(), ver = args.get('ver') || 'PENDIENTES';
+    let out;
+    if (ver === 'PENDIENTES') out = q(SQL_CH + " WHERE ch.estado = 'PENDIENTE' ORDER BY ch.fecha_pago, ch.id");
+    else {
+      const desde = fechaOk(args.get('desde') || masDias(h, -90)), hasta = fechaOk(args.get('hasta') || masDias(h, 365));
+      out = q(SQL_CH + " WHERE ch.estado != 'PENDIENTE' AND ch.fecha_pago BETWEEN ? AND ? ORDER BY ch.fecha_pago DESC, ch.id DESC", [desde, hasta]);
+    }
+    for (const c of out) c.dias = entreDias(h, c.fecha_pago);
+    const pend = ver === 'PENDIENTES' ? out : q("SELECT * FROM cheques WHERE estado = 'PENDIENTE'");
+    const m1 = masDias(h, 1), s7 = masDias(h, 7);
+    return { lista: out, total: r2(sum(pend, c => c.importe)), n: pend.length,
+      hoy_manana: r2(sum(pend.filter(c => c.fecha_pago <= m1), c => c.importe)), hoy_manana_n: pend.filter(c => c.fecha_pago <= m1).length,
+      semana: r2(sum(pend.filter(c => c.fecha_pago <= s7), c => c.importe)), semana_n: pend.filter(c => c.fecha_pago <= s7).length,
+      atrasados: pend.filter(c => c.fecha_pago < h).length };
+  });
+  ruta('GET', '/api/cheques/<int>', (d, id) => q1(SQL_CH + ' WHERE ch.id = ?', [+id]) || E('No se encontró ese cheque'));
+  ruta('POST', '/api/cheques', d => {
+    const tipo = String(d.tipo || 'FISICO').toUpperCase() === 'ECHEQ' ? 'ECHEQ' : 'FISICO';
+    const imp = importe(d.importe), emision = fechaOk(d.emision || hoy()), fp = fechaOk(d.fecha_pago || emision);
+    if (fp < emision) E('La fecha de pago no puede ser anterior a la fecha en que lo hiciste');
+    const cuentaId = +d.cuenta_id || null;
+    if (cuentaId && !q1('SELECT 1 FROM cuentas WHERE id = ?', [cuentaId])) E('La cuenta elegida no existe');
+    const prov = +d.proveedor_id ? q1('SELECT * FROM proveedores WHERE id = ?', [+d.proveedor_id]) : null;
+    const quien = prov ? '' : txt(d.a_quien, 80);
+    if (!prov && !quien) E('Escribí a quién le diste el cheque');
+    const nro = txt(d.numero, 30);
+    if (nro) { const rep = q1("SELECT fecha_pago, importe FROM cheques WHERE numero = ? AND estado != 'ANULADO' AND id != ? AND COALESCE(cuenta_id,0) = ?", [nro, +d.id || 0, cuentaId || 0]);
+      if (rep && !d.forzar) return { confirmar: `Ya hay un cheque N° ${nro} (paga el ${dmy(rep.fecha_pago)}, ${moneyTxt(rep.importe)}). ¿Lo guardo igual?` }; }
+    const par = [tipo, nro, cuentaId, prov ? prov.id : null, quien, imp, emision, fp, String(d.notas || '').trim().slice(0, 500)];
+    let id = +d.id || 0, pagoId = null;
+    if (id) {
+      const ch = q1('SELECT * FROM cheques WHERE id = ?', [id]); if (!ch) E('No se encontró ese cheque');
+      run('UPDATE cheques SET tipo=?, numero=?, cuenta_id=?, proveedor_id=?, a_quien=?, importe=?, emision=?, fecha_pago=?, notas=? WHERE id = ?', [...par, id]);
+      if (ch.pago_id) run('UPDATE pagos SET medio=?, importe=?, fecha=?, cuenta_id=?, proveedor_id=COALESCE(?, proveedor_id), modificado=? WHERE id = ?',
+        [tipo === 'ECHEQ' ? 'ECHEQ' : 'CHEQUE', imp, emision, cuentaId, prov ? prov.id : null, ahora(), ch.pago_id]);
+    } else {
+      if (d.como_pago && prov) {
+        if (!cuentaId) E('Elegí el banco del cheque');
+        pagoId = run('INSERT INTO pagos(tipo, fecha, importe, medio, cuenta_id, proveedor_id, concepto, operacion, creado) VALUES (?,?,?,?,?,?,?,?,?)',
+          ['PROVEEDOR', emision, imp, tipo === 'ECHEQ' ? 'ECHEQ' : 'CHEQUE', cuentaId, prov.id, `${tipo === 'ECHEQ' ? 'eCheq' : 'Cheque'}${nro ? ' N° ' + nro : ''} · paga el ${dmy(fp)}`, '', ahora()]);
+      }
+      id = run('INSERT INTO cheques(tipo, numero, cuenta_id, proveedor_id, a_quien, importe, emision, fecha_pago, notas, pago_id, creado) VALUES (?,?,?,?,?,?,?,?,?,?,?)', [...par, pagoId, ahora()]);
+    }
+    anotar('Cheque ' + (d.id ? 'modificado' : 'cargado'), `${tipo === 'ECHEQ' ? 'eCheq' : 'cheque'} ${nro} a ${prov ? prov.nombre : quien} ${moneyTxt(imp)} paga el ${dmy(fp)}`);
+    return { ok: true, id, pago_id: pagoId };
+  });
+  ruta('POST', '/api/cheques/<int>/debitado', (d, id) => {
+    const ch = q1('SELECT * FROM cheques WHERE id = ?', [+id]); if (!ch) E('No se encontró ese cheque');
+    if (d.debitado ?? 1) { if (ch.estado === 'ANULADO') E('El cheque está anulado'); run("UPDATE cheques SET estado = 'DEBITADO', debitado_fecha = ? WHERE id = ?", [d.fecha ? fechaOk(d.fecha) : hoy(), +id]); }
+    else run("UPDATE cheques SET estado = 'PENDIENTE', debitado_fecha = '' WHERE id = ?", [+id]);
+    anotar((d.debitado ?? 1) ? 'Cheque debitado' : 'Cheque vuelto a pendiente', `${ch.numero} ${moneyTxt(ch.importe)}`);
+    return { ok: true };
+  });
+  ruta('POST', '/api/cheques/<int>/anular', (d, id) => {
+    const motivo = txt(d.motivo, 200); if (motivo.length < 3) E('Escribí el motivo');
+    const ch = q1('SELECT * FROM cheques WHERE id = ?', [+id]); if (!ch || ch.estado === 'ANULADO') E('El cheque no existe o ya estaba anulado');
+    run("UPDATE cheques SET estado = 'ANULADO', anulado_motivo = ? WHERE id = ?", [motivo, +id]);
+    if (ch.pago_id && d.anular_pago) run("UPDATE pagos SET estado = 'ANULADO', anulado_motivo = ? WHERE id = ? AND estado = 'ACTIVO'", ['Cheque anulado: ' + motivo, ch.pago_id]);
+    anotar('Cheque ANULADO', `${ch.numero} ${moneyTxt(ch.importe)}: ${motivo}`);
+    return { ok: true };
+  });
+  ruta('POST', '/api/cheques/<int>/reactivar', (d, id) => {
+    const ch = q1('SELECT * FROM cheques WHERE id = ?', [+id]); if (!ch) E('No se encontró ese cheque');
+    run("UPDATE cheques SET estado = 'PENDIENTE', anulado_motivo = '', debitado_fecha = '' WHERE id = ?", [+id]);
+    if (ch.pago_id) run("UPDATE pagos SET estado = 'ACTIVO', anulado_motivo = '' WHERE id = ? AND anulado_motivo LIKE 'Cheque anulado:%'", [ch.pago_id]);
+    return { ok: true };
+  });
+  const chequesAviso = () => {
+    const h = hoy(), m1 = masDias(h, 1);
+    return { hoy: q(SQL_CH + " WHERE ch.estado = 'PENDIENTE' AND ch.fecha_pago <= ? ORDER BY ch.fecha_pago", [m1]).map(c => ({ ...c, dias: entreDias(h, c.fecha_pago) })),
+      semana: r2(val("SELECT COALESCE(SUM(importe),0) FROM cheques WHERE estado = 'PENDIENTE' AND fecha_pago <= ?", [masDias(h, 7)])),
+      semana_n: val("SELECT COUNT(*) FROM cheques WHERE estado = 'PENDIENTE' AND fecha_pago <= ?", [masDias(h, 7)]) };
+  };
 
   /* ------------------------------------------------ comprobantes: se achican las fotos (igual que en la PC) */
   const uuid = () => [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
@@ -750,7 +846,7 @@ CREATE INDEX IF NOT EXISTS idx_eventos ON eventos(fecha);`;
     const totMes = Object.fromEntries(q("SELECT tipo, SUM(importe) AS t FROM pagos WHERE estado = 'ACTIVO' AND substr(fecha,1,7) = ? GROUP BY tipo", [mes]).map(r => [r.tipo, r2(r.t)]));
     const sinComp = val("SELECT COUNT(*) FROM pagos p WHERE estado = 'ACTIVO' AND medio != 'EFECTIVO' AND fecha >= ? AND NOT EXISTS (SELECT 1 FROM adjuntos a WHERE a.pago_id = p.id)", [masDias(h, -60)]);
     const ultimos = q(sqlPagos({})[0] + ' ORDER BY p.creado DESC, p.id DESC LIMIT 8');
-    return { eventos: eventosEntre(h, masDias(h, 30)).slice(0, 6), proveedores: paraPagar, deuda, vence_semana: r2(sum(paraPagar, p => p.vence_semana)), hasta_semana: hs, sin_acreditar: sinAcr, dias_aviso: dias, mes: totMes, sin_comprobante: sinComp, ultimos };
+    return { cheques: chequesAviso(), eventos: eventosEntre(h, masDias(h, 30)).slice(0, 6), proveedores: paraPagar, deuda, vence_semana: r2(sum(paraPagar, p => p.vence_semana)), hasta_semana: hs, sin_acreditar: sinAcr, dias_aviso: dias, mes: totMes, sin_comprobante: sinComp, ultimos };
   });
   ruta('GET', '/api/avisos', () => {
     const out = [], dias = Math.trunc(num(getConfig().dias_aviso_acreditar || 5));
@@ -759,6 +855,12 @@ CREATE INDEX IF NOT EXISTS idx_eventos ON eventos(fecha);`;
     let venc = 0;
     for (const { id } of q('SELECT id FROM proveedores WHERE activo = 1')) venc += estadoProveedor(id).resumenes.filter(x => x.falta > 0.009 && (x.vencimiento || x.fecha) <= hoy()).length;
     if (venc) out.push({ ico: 'reloj', texto: `${venc} resumen${venc === 1 ? '' : 'es'} vence${venc === 1 ? '' : 'n'} hoy o ya venció`, ir: 'principal' });
+    const ch = chequesAviso().hoy, h = hoy();
+    const at = ch.filter(c => c.fecha_pago < h), hy = ch.filter(c => c.fecha_pago === h), mn = ch.filter(c => c.fecha_pago > h);
+    const tx = l => `${l.length} cheque${l.length === 1 ? '' : 's'} (${moneyTxt(sum(l, c => c.importe))})`;
+    if (at.length) out.push({ ico: 'alerta', texto: `${tx(at)} ya tendría${at.length === 1 ? '' : 'n'} que haberse debitado: ¿lo${at.length === 1 ? '' : 's'} marcás?`, ir: 'cheques' });
+    if (hy.length) out.push({ ico: 'cheque', texto: `Hoy se debita${hy.length === 1 ? '' : 'n'} ${tx(hy)}`, ir: 'cheques' });
+    if (mn.length) out.push({ ico: 'cheque', texto: `Mañana se debita${mn.length === 1 ? '' : 'n'} ${tx(mn)}`, ir: 'cheques' });
     return out;
   });
   ruta('GET', '/api/informe', (d, args) => {

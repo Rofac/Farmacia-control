@@ -85,6 +85,8 @@ async function cargarPago(pre = {}, luego) {
       <div><label>Fecha del pago</label><input type="date" id="cpF" value="${esc(p.fecha)}"></div>
       <div><label>Importe</label>${campoMonto('id="cpI" style="font-size:18px;font-weight:800"', p.importe)}</div>
       <div><label>Cómo</label><select id="cpM">${Object.entries(MEDIOS).map(([k, v]) => `<option value="${k}" ${k === p.medio ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+      <div class="s-CHEQUE"><label>N° de cheque</label><input id="cpChN" value="${esc(p.cheque_numero || '')}" inputmode="numeric"></div>
+      <div class="s-CHEQUE"><label>Fecha de pago (cuándo se debita)</label><input type="date" id="cpChF" value="${esc(p.cheque_fecha_pago || p.fecha)}"></div>
       <div><label>Desde dónde salió la plata</label><div class="inl" style="flex-wrap:nowrap;gap:6px"><select id="cpK"><option value="">Elegí…</option>${ctas.map(x => `<option value="${x.id}" ${x.id === +p.cuenta_id ? 'selected' : ''}>${esc(x.nombre)}${x.tipo === 'TERCERO' ? ' (paga por mí)' : ''}</option>`).join('')}</select>
         <button type="button" class="ab" id="cpKN" title="Agregar banco o persona">${ico('plus')}</button></div></div>
       <div><label>N° de operación / comprobante</label><input id="cpO" value="${esc(p.operacion || '')}" placeholder="Lo dice el comprobante del banco"></div>
@@ -115,7 +117,9 @@ async function cargarPago(pre = {}, luego) {
   };
   $('#cpT', m).onclick = e => { const b = e.target.closest('[data-t]'); if (!b) return; tipo = b.dataset.t; $$('#cpT button', m).forEach(x => x.classList.toggle('act', x === b)); pintarTipo(); };
   $('#cpP', m).onchange = info; $('#cpE', m).onchange = info; $('#cpF', m).addEventListener('change', () => tipo === 'SUELDO' && info());
-  $('#cpM', m).onchange = () => { if ($('#cpM', m).value === 'EFECTIVO') { const ef = ctas.find(c => c.tipo === 'EFECTIVO'); if (ef) $('#cpK', m).value = ef.id; } };
+  const verCheque = () => $$('.s-CHEQUE', m).forEach(x => x.style.display = ['CHEQUE', 'ECHEQ'].includes($('#cpM', m).value) ? '' : 'none');
+  $('#cpM', m).onchange = () => { if ($('#cpM', m).value === 'EFECTIVO') { const ef = ctas.find(c => c.tipo === 'EFECTIVO'); if (ef) $('#cpK', m).value = ef.id; } verCheque(); };
+  verCheque();
   $('#cpKN', m).onclick = () => nuevaCuenta(async id => { const l = await api('/api/cuentas'); $('#cpK', m).innerHTML = '<option value="">Elegí…</option>' + l.filter(x => x.activo).map(x => `<option value="${x.id}">${esc(x.nombre)}${x.tipo === 'TERCERO' ? ' (paga por mí)' : ''}</option>`).join(''); $('#cpK', m).value = id; });
   $('#cpEN', m).onclick = () => editarEmpleado({}, async id => { const l = await api('/api/empleados'); L.emp = l; $('#cpE', m).innerHTML = '<option value="">Elegí…</option>' + l.filter(x => x.activo).map(x => `<option value="${x.id}">${esc(x.nombre)}</option>`).join(''); $('#cpE', m).value = id; info(); });
   pintarTipo();
@@ -124,6 +128,7 @@ async function cargarPago(pre = {}, luego) {
     const d = { id: pre.id, tipo, proveedor_id: $('#cpP', m).value, categoria: $('#cpC', m).value, empleado_id: $('#cpE', m).value, fecha: $('#cpF', m).value, importe: $('#cpI', m).value,
       medio: $('#cpM', m).value, cuenta_id: $('#cpK', m).value, operacion: $('#cpO', m).value, periodo: tipo === 'SUELDO' ? $('#cpPe', m).value : '', concepto: $('#cpD', m).value,
       adelanto: tipo === 'SUELDO' && $('#cpAd', m).checked ? 1 : 0,
+      cheque_numero: $('#cpChN', m).value, cheque_fecha_pago: $('#cpChF', m).value,
       acreditado: $('#cpAc', m) && $('#cpAc', m).checked ? 1 : 0 };
     const btn = $('#cpOk', m); btn.disabled = true;
     try {
@@ -146,6 +151,7 @@ async function verPago(id, luego) {
   const m = modal(`${TIPO_TXT[p.tipo]}: ${esc(quienPago(p))}`, `
     <div class="pago-cab"><div><div class="cob-tot" style="text-align:left;margin:0">${money(p.importe)}</div>
       <div class="muted">${dmy(p.fecha)} · ${esc(MEDIOS[p.medio] || p.medio)}${p.cuenta ? ' desde <b>' + esc(p.cuenta) + '</b>' : ''}${p.operacion ? ' · N° op. <b>' + esc(p.operacion) + '</b>' : ''}</div>
+      ${p.cheque_id ? `<div class="muted" style="margin-top:4px">${ico('cheque')} ${p.medio === 'ECHEQ' ? 'eCheq' : 'Cheque'}${p.cheque_numero ? ' N° <b>' + esc(p.cheque_numero) + '</b>' : ''} · se debita el <b>${dmy(p.cheque_fecha_pago)}</b> · ${p.cheque_estado === 'DEBITADO' ? '<span class="pos">ya debitado</span>' : p.cheque_estado === 'ANULADO' ? 'anulado' : 'pendiente'}</div>` : ''}
       ${p.periodo ? `<div class="muted">Período: ${esc(p.periodo)}</div>` : ''}${p.concepto ? `<div>${esc(p.concepto)}</div>` : ''}
       ${p.estado === 'ANULADO' ? `<div class="neg">ANULADO: ${esc(p.anulado_motivo)}</div>` : ''}</div>
       ${p.tipo === 'PROVEEDOR' && p.estado === 'ACTIVO' ? `<div class="acr-box ${p.acreditado ? 'si' : 'no'}">${p.acreditado ? `${ico('okc')} Acreditado<br><small>${dmy(p.acreditado_fecha)}</small>` : `${ico('reloj')} Sin acreditar<br><small>${(n => n === 0 ? 'cargado hoy' : n === 1 ? 'hace 1 día' : `hace ${n} días`)(Math.round((new Date(hoy()) - new Date(p.fecha)) / 864e5))}</small>`}

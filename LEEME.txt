@@ -10,6 +10,16 @@ Se abre "Cargar pago" con el comprobante adjunto. Si el comprobante es PDF, la a
 el N° de operación y, si lo reconoce, el proveedor (revisalo antes de guardar). Si es una imagen, escribís el importe.
 (Para que aparezca en Compartir la app tiene que estar INSTALADA. En iPhone no aparece.)
 
+NUEVO (v1.3): CHEQUES (aparte del calendario)
+- Menú "Cheques": los cheques de papel y eCheq que das, con N°, a quién, importe, fecha en que lo hiciste y
+  FECHA DE PAGO (cuándo se debita). Arriba: lo que se debita hoy y mañana, en 7 días y el total por debitar.
+- Cuando sale del banco tocás "Debitado" y pasa a "Debitados y anulados" (con Excel).
+- Si es para un proveedor, al cargarlo se carga también como pago (se descuenta de lo que le debés). Y al revés:
+  si cargás un pago "Cómo: Cheque o eCheq", pide N° y fecha de pago y aparece solo en Cheques.
+- Aviso: en el Inicio y en la campanita, los que se debitan hoy y mañana, y los que ya pasaron sin marcar.
+- NO aparecen en el calendario ni en los turnos.
+- Igual que los turnos: la copia de la PC no tiene cheques.
+
 NUEVO (v1.2): MIS EVENTOS EN EL CALENDARIO
 - "Anotar algo" (en Inicio, en Turnos de farmacia y al tocar un día): turno médico 🩺, trámite 📄, cumpleaños 🎂,
   salida/evento 🎉, recordatorio 🔔 u otro 📌, con fecha, hora opcional y nota. Los cumpleaños se repiten todos los años.
@@ -31,7 +41,7 @@ NUEVO (v1.1): TURNOS DE FARMACIA Y VACACIONES
 
 CÓMO PUBLICARLA (igual que Wolves y Aguas Santa María)
 ACTUALIZAR LA QUE YA TENÉS: en el repositorio Farmacia-control subir/reemplazar index.html, sw.js, LEEME.txt,
-static/estilo.css, static/app.js, static/turnos.js (nuevo) y js/servidor.js. Los datos del celular no se tocan.
+static/app.js, static/pagos.js, static/pantallas.js, static/cheques.js (nuevo) y js/servidor.js. Los datos del celular no se tocan.
 
 1. GitHub (Rofac) > "+" > New repository > nombre: Pagos (Public) > Create.
 2. Add file > Upload files: index.html, sw.js, manifest.webmanifest, LEEME.txt > Commit changes.

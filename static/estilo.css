@@ -735,3 +735,12 @@ tr.demorado td { background:rgba(226,59,74,.06); }
 .ev-tipos button.act { background:var(--pri); border-color:var(--pri); color:#fff; }
 .ev-chk { display:flex !important; align-items:center; gap:8px; flex-wrap:wrap; cursor:pointer; text-transform:none !important; letter-spacing:0 !important; font-size:14.5px !important; font-weight:500 !important; color:var(--txt) !important; }
 .ev-chk input { width:18px; height:18px; }
+
+/* cheques */
+.ch-f { display:grid; grid-template-columns:130px minmax(0,1fr) auto; gap:12px; align-items:center; padding:12px 6px; border-bottom:1px solid var(--borde); cursor:pointer; border-left:4px solid transparent; }
+.ch-f:last-of-type { border-bottom:0; }
+.ch-f.rojo { border-left-color:var(--rojo); } .ch-f.naranja { border-left-color:var(--naranja); }
+.ch-fe { display:flex; flex-direction:column; gap:4px; align-items:flex-start; }
+.ch-i { display:flex; flex-direction:column; gap:6px; align-items:flex-end; text-align:right; white-space:nowrap; }
+.ch-i b { font-size:16px; }
+@media (max-width:600px) { .ch-f { grid-template-columns:minmax(0,1fr) auto; } .ch-fe { grid-column:1 / -1; flex-direction:row; align-items:center; gap:8px; } }
