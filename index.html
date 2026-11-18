@@ -9,7 +9,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Pagos">
 <title>Pagos Farmacia</title>
 <link rel="stylesheet" href="static/estilo.css">
-<script>try { if (localStorage.getItem('tema') === 'dark') document.documentElement.dataset.theme = 'dark'; if (localStorage.getItem('mini') === '1') document.documentElement.classList.add('mini-pre'); } catch (e) {}</script>
+<link rel="stylesheet" href="static/apariencia.css">
+<script>try { if (localStorage.getItem('tema') === 'dark') document.documentElement.dataset.theme = 'dark'; if (localStorage.getItem('mini') === '1') document.documentElement.classList.add('mini-pre');
+  /* apariencia elegida (antes de dibujar, para que no "parpadee") */
+  const ap = JSON.parse(localStorage.getItem('rofac_pagos_apariencia') || '{}'), h = document.documentElement;
+  if (ap.pal && ap.pal !== 'petroleo') h.dataset.pal = ap.pal; if (ap.letra && ap.letra !== 'clasica') h.dataset.letra = ap.letra; if (ap.tam && ap.tam !== 'normal') h.dataset.tam = ap.tam;
+} catch (e) {}</script>
 </head>
 <body>
 <div id="app">

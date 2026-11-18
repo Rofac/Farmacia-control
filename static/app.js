@@ -144,6 +144,7 @@ function bajarCSV(nombre, titulos, filas) {
 }
 
 const ICONS = {
+  paleta: '<path d="M12 22a10 10 0 1 1 10-10c0 2.8-2.2 4-4 4h-2.2a1.8 1.8 0 0 0-1.3 3.1A1.8 1.8 0 0 1 12 22z"/><circle cx="7.5" cy="11" r="1.2"/><circle cx="10.5" cy="7" r="1.2"/><circle cx="15.5" cy="7.5" r="1.2"/>',
   mate: '<path d="M7 9h10l-1 9a3 3 0 0 1-3 3h-2a3 3 0 0 1-3-3z"/><path d="M6.5 9a5.5 5.5 0 0 1 11 0"/><path d="M14 9l4-7"/>',
   pedido: '<path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/>',
   foto: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>',

@@ -366,9 +366,10 @@ P.config = async (main) => {
       <div><label>Cena cuando hacen turno</label>${campoMonto('name="sueldo_cena"', aNum(c.sueldo_cena))}</div></div>
       <div class="ayuda">Lo de cada uno se cambia en Sueldos, tocando el lápiz al lado del nombre.</div></div>
     <div class="card"><h3>${ico('db')} Copia de seguridad</h3><div id="cfCopia"></div></div>
+    <div class="card"><h3>${ico('paleta')} Apariencia</h3><div id="cfAp"></div></div>
     <div class="card"><h3>📲 La app en este celular</h3><div id="cfApp"></div></div>
     <div class="muted chico" style="text-align:center;margin-top:16px">Pagos Farmacia · ${esc(marcaTexto())}</div>`;
-  tarjetaCopia($('#cfCopia')); tarjetaApp($('#cfApp'));
+  tarjetaCopia($('#cfCopia')); tarjetaApp($('#cfApp')); Apariencia.tarjeta($('#cfAp'));
   $('#cfOk').onclick = async () => { try { const d = leer(main);
     delete d.undefined; await api('/api/config', d); ME = await api('/api/me'); toast('Guardado'); $('#gymNom').textContent = CFG().nombre_negocio; } catch (e) { fallo(e); } };
 };

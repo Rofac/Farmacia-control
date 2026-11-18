@@ -180,6 +180,43 @@ window.RespaldoUI = { enganchar(main, id, irConfig) {
   main.prepend(d);
 } };
 
+/* ---------- apariencia: color, tipo de letra y tamaño (queda guardada en este celular) */
+const Apariencia = (() => {
+  const K = 'rofac_pagos_apariencia';
+  const COLORES = [['petroleo', 'Petróleo', '#1f6f78', '#0e2a3d'], ['verde', 'Verde agua', '#0e7c66', '#06302a'], ['lila', 'Lila', '#8a5cc2', '#3b2457'], ['azul', 'Azul', '#2f6fb5', '#0f2a4a'],
+    ['rosa', 'Rosa', '#d0568a', '#5a1f3d'], ['coral', 'Coral', '#e07048', '#5c2416'], ['grafito', 'Grafito', '#4b5563', '#1e2329']];
+  const LETRAS = [['clasica', 'Clásica', 'system-ui, sans-serif'], ['redondeada', 'Redondeada', 'Poppins, sans-serif'], ['elegante', 'Elegante', 'Lora, Georgia, serif']];
+  const TAMS = [['normal', 'Normal', 15], ['grande', 'Grande', 17], ['muy', 'Muy grande', 19]];
+  const leer = () => { try { return Object.assign({ pal: 'petroleo', letra: 'clasica', tam: 'normal' }, JSON.parse(localStorage.getItem(K) || '{}')); } catch (e) { return { pal: 'petroleo', letra: 'clasica', tam: 'normal' }; } };
+  function aplicar(a = leer()) {
+    const h = document.documentElement;
+    if (a.pal === 'petroleo') delete h.dataset.pal; else h.dataset.pal = a.pal;
+    if (a.letra === 'clasica') delete h.dataset.letra; else h.dataset.letra = a.letra;
+    if (a.tam === 'normal') delete h.dataset.tam; else h.dataset.tam = a.tam;
+    const c = COLORES.find(x => x[0] === a.pal) || COLORES[0], m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.content = a.pal === 'petroleo' ? '#12324a' : c[3];     // color de la barra del celular
+  }
+  function guardar(k, v) { const a = leer(); a[k] = v; try { localStorage.setItem(K, JSON.stringify(a)); } catch (e) { /* */ } aplicar(a); }
+  function tarjeta(el) {
+    const a = leer();
+    el.innerHTML = `<p style="margin-top:0" class="muted">Elegí cómo querés ver la app. Se cambia al instante y queda guardado en este celular.</p>
+      <label>Color</label><div class="ap-fila">${COLORES.map(([k, n, c1, c2]) => `<button type="button" class="ap-color ${a.pal === k ? 'act' : ''}" data-ap="pal" data-v="${k}">
+        <i style="background:linear-gradient(135deg, ${c2}, ${c1})"></i>${n}</button>`).join('')}</div>
+      <label>Tipo de letra</label><div class="ap-fila">${LETRAS.map(([k, n, f]) => `<button type="button" class="ap-op ${a.letra === k ? 'act' : ''}" data-ap="letra" data-v="${k}">
+        <b style="font-family:${f}">${n}</b><small style="font-family:${f}">$ 1.500,00</small></button>`).join('')}</div>
+      <label>Tamaño de letra</label><div class="ap-fila">${TAMS.map(([k, n, px]) => `<button type="button" class="ap-op ${a.tam === k ? 'act' : ''}" data-ap="tam" data-v="${k}">
+        <b style="font-size:${px}px">Aa</b><small>${n}</small></button>`).join('')}</div>
+      <button type="button" class="btn chico" data-ap-reset>Volver a como venía</button>`;
+    el.onclick = e => {
+      const b = e.target.closest('[data-ap]');
+      if (b) { guardar(b.dataset.ap, b.dataset.v); tarjeta(el); return; }
+      if (e.target.closest('[data-ap-reset]')) { try { localStorage.removeItem(K); } catch (x) { /* */ } aplicar(); tarjeta(el); toast('Listo: volvió a como venía'); }
+    };
+  }
+  aplicar();
+  return { aplicar, tarjeta, leer };
+})();
+
 /* ---------- instalar la app */
 let PEDIDO_INSTALAR = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); PEDIDO_INSTALAR = e; if ($('#cfApp')) tarjetaApp($('#cfApp')); });

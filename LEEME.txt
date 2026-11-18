@@ -63,3 +63,13 @@ Todo está en el celular. Configuración > "Hacer copia ahora" > guardala en Goo
 Además, la app guarda sola una copia por día adentro del celular (las últimas 7, sin comprobantes).
 
 ACTUALIZAR: subir los archivos nuevos al mismo repositorio. Los datos no se tocan.
+
+APARIENCIA (18/11/2026, como en la Agenda Docente y la app de empleados)
+- Datos > Configuración > Apariencia: Color (Petróleo, que es el de siempre, Verde agua, Lila, Azul, Rosa, Coral o Grafito),
+  Tipo de letra (Clásica, Redondeada o Elegante) y Tamaño de letra (Normal, Grande o Muy grande).
+- Se cambia al instante, queda guardado en este celular (también anda con el modo oscuro) y "Volver a como venía" lo deja como antes.
+  No toca los pagos ni nada de lo cargado.
+- ACTUALIZAR: subí todo al repositorio Rofac/Farmacia-control como siempre. Hay archivos nuevos: static/apariencia.css y la
+  carpeta fonts/ (4 archivos). El celular toma la versión nueva (pag-1.4.0) la próxima vez que abre la app con internet
+  (a veces hay que cerrarla y abrirla 2 veces).
+

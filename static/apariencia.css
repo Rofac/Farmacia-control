@@ -1,0 +1,49 @@
+/* Apariencia elegida (Configuración > Apariencia) (Configuración > Apariencia). Se guarda en el celular.
+   html[data-pal]   = color · html[data-letra] = tipo de letra · html[data-tam] = tamaño de letra */
+@font-face { font-family: "Poppins"; src: url("../fonts/Poppins-Regular.woff") format("woff"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Poppins"; src: url("../fonts/Poppins-Medium.woff") format("woff"); font-weight: 500 600; font-display: swap; }
+@font-face { font-family: "Poppins"; src: url("../fonts/Poppins-Bold.woff") format("woff"); font-weight: 700 900; font-display: swap; }
+@font-face { font-family: "Lora"; src: url("../fonts/Lora-Variable.woff") format("woff"); font-weight: 400 700; font-display: swap; }
+
+/* ---------- colores (por defecto, sin data-pal: los de siempre, azul petróleo). Los botones verdes y los avisos rojos/naranjas quedan siempre igual) */
+:root[data-pal="verde"]   { --side1:#06302a; --side2:#0e7c66; --side-mid:#0b5a4c; --top:#0a4a40; --top2:#12907a; --pri:#0e7c66; --pri2:#0a6352; --act:#6ee7d8; --side-sub:#a8d8cc; }
+:root[data-pal="lila"]    { --side1:#3b2457; --side2:#8a5cc2; --side-mid:#5e3a8a; --top:#4a2d6b; --top2:#9b6fd0; --pri:#7b4fb8; --pri2:#633c9a; --act:#e2c9ff; --side-sub:#d9c6ef; }
+:root[data-pal="azul"]    { --side1:#0f2a4a; --side2:#2f6fb5; --side-mid:#1d4d82; --top:#173e6b; --top2:#3a83cf; --pri:#2563ad; --pri2:#1d4f8a; --act:#9cc8ff; --side-sub:#bcd3ee; }
+:root[data-pal="rosa"]    { --side1:#5a1f3d; --side2:#d0568a; --side-mid:#953763; --top:#7a2a52; --top2:#e06a9c; --pri:#c2457a; --pri2:#a23664; --act:#ffc2dc; --side-sub:#f1c9da; }
+:root[data-pal="coral"]   { --side1:#5c2416; --side2:#e07048; --side-mid:#9c432c; --top:#7a3320; --top2:#ec8a5e; --pri:#d0603a; --pri2:#b04c2a; --act:#ffd0b8; --side-sub:#f3cdbd; }
+:root[data-pal="grafito"] { --side1:#1e2329; --side2:#4b5563; --side-mid:#343b45; --top:#262c33; --top2:#5b6675; --pri:#3f4a59; --pri2:#2d3540; --act:#cfd6df; --side-sub:#c3cad3; }
+:root[data-pal="verde"]:not([data-theme="dark"])   { --bg:#eef5f3; }
+:root[data-pal="lila"]:not([data-theme="dark"])    { --bg:#f5f0fa; }
+:root[data-pal="azul"]:not([data-theme="dark"])    { --bg:#eef3f9; }
+:root[data-pal="rosa"]:not([data-theme="dark"])    { --bg:#fbf0f5; }
+:root[data-pal="coral"]:not([data-theme="dark"])   { --bg:#fdf3ee; }
+:root[data-pal="grafito"]:not([data-theme="dark"]) { --bg:#f1f3f5; }
+/* en modo oscuro el color principal se aclara un poco para que se lea sobre fondo oscuro */
+:root[data-theme="dark"][data-pal="verde"]   { --pri:#2fb596; }
+:root[data-theme="dark"][data-pal="lila"]    { --pri:#a07ad8; }
+:root[data-theme="dark"][data-pal="azul"]    { --pri:#5b9be0; }
+:root[data-theme="dark"][data-pal="rosa"]    { --pri:#e07aa6; }
+:root[data-theme="dark"][data-pal="coral"]   { --pri:#ec8a64; }
+:root[data-theme="dark"][data-pal="grafito"] { --pri:#8c98a8; }
+:root[data-pal] #side { background: linear-gradient(170deg, var(--side1) 0%, var(--side-mid) 55%, var(--side2) 100%); }
+:root[data-pal] .mi.act { box-shadow: inset 3px 0 0 var(--act); }
+
+/* ---------- tipo de letra */
+:root[data-letra="redondeada"] body, :root[data-letra="redondeada"] button, :root[data-letra="redondeada"] input,
+:root[data-letra="redondeada"] select, :root[data-letra="redondeada"] textarea { font-family: "Poppins", system-ui, sans-serif; }
+:root[data-letra="elegante"] body, :root[data-letra="elegante"] button, :root[data-letra="elegante"] input,
+:root[data-letra="elegante"] select, :root[data-letra="elegante"] textarea { font-family: "Lora", Georgia, serif; }
+
+/* ---------- tamaño de letra (la impresión sale siempre igual) */
+:root[data-tam="grande"] { zoom: 1.1; }
+:root[data-tam="muy"]    { zoom: 1.2; }
+@media print { :root[data-tam] { zoom: 1; } }
+
+/* ---------- tarjeta de Configuración */
+.ap-fila { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 14px; }
+.ap-color { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 74px; padding: 8px 4px; border: 2px solid var(--borde); border-radius: 12px;
+  background: var(--card); color: var(--txt); cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; }
+.ap-color i { display: block; width: 40px; height: 40px; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(255,255,255,.6); }
+.ap-color.act, .ap-op.act { border-color: var(--pri); box-shadow: inset 0 0 0 2px var(--pri); }
+.ap-op { flex: 1 1 0; min-width: 0; padding: 10px 4px; border: 2px solid var(--borde); border-radius: 12px; background: var(--card); color: var(--txt); cursor: pointer; text-align: center; }
+.ap-op b { display: block; font-size: 15px; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ap-op small { color: var(--txt2); font-size: 11.5px; white-space: nowrap; }
