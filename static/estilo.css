@@ -750,3 +750,58 @@ tr.demorado td { background:rgba(226,59,74,.06); }
 .lee-comp.ok { background: #e7f6ec; color: #166534; } .lee-comp.no { background: #fff4e5; color: #92400e; }
 .lee-comp svg { width: 18px; height: 18px; flex: none; }
 input.leido { background: #f0fbf3 !important; box-shadow: 0 0 0 2px #86efac inset; }
+
+/* logo de la farmacia */
+#side .logo.con-logo { background: #fff; width: auto; max-width: 92%; height: auto; padding: 8px 12px; border-radius: 14px; }
+#side .logo.con-logo img { display: block; width: 150px; max-width: 100%; height: auto; }
+body.mini #side .logo.con-logo { width: 44px; height: 44px; padding: 4px; border-radius: 50%; }
+body.mini #side .logo.con-logo img { content: url(../img/roma_ico.png); width: 36px; }
+#topTit { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#topTit span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tit-logo { width: 30px; height: 30px; border-radius: 50%; background: #fff; flex: none; box-shadow: 0 0 0 2px #fff6; }
+.df-logo { text-align: center; margin: -6px 0 12px; } .df-logo img { width: 230px; max-width: 80%; }
+.df-r { display: grid; grid-template-columns: 1fr auto; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--borde, #e5e7eb); }
+.df-r small { grid-column: 1; color: var(--tenue, #6b7280); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.df-r b { grid-column: 1; font-size: 16px; } .df-r .ab { grid-column: 2; grid-row: 1 / span 2; }
+/* qué hay que pagar */
+.ag-dia { padding: 10px 14px; } .ag-dia.atr { border-left: 5px solid var(--rojo); } .ag-dia.no-alcanza { box-shadow: inset 0 0 0 2px #fca5a5; }
+.ag-cab { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding-bottom: 6px; border-bottom: 1px solid var(--borde, #e5e7eb); }
+.ag-cab > b { font-size: 16px; } .ag-tot { font-weight: 800; font-size: 16px; }
+.ag-it { display: grid; grid-template-columns: 36px 1fr auto; grid-template-areas: "i t m" "i a a"; gap: 2px 10px; align-items: center; padding: 9px 0; border-bottom: 1px dashed var(--borde, #e5e7eb); }
+.ag-it:last-child { border-bottom: 0; }
+.ag-ico { grid-area: i; width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: #eef2f7; color: #334155; }
+.ag-ico svg { width: 18px; height: 18px; }
+.ag-it.tCHEQUE .ag-ico { background: #fde8e8; color: #b91c1c; } .ag-it.tSUELDO .ag-ico { background: #e0f2fe; color: #0369a1; }
+.ag-it.tFIJO .ag-ico { background: #fef3c7; color: #b45309; } .ag-it.tRESUMEN .ag-ico { background: #e7f6ec; color: #166534; }
+.ag-tx { grid-area: t; min-width: 0; } .ag-tx b { display: block; } .ag-tx small { display: block; color: var(--tenue, #6b7280); font-size: 12.5px; }
+.ag-imp { grid-area: m; font-weight: 800; font-size: 15.5px; white-space: nowrap; }
+.ag-acc { grid-area: a; display: flex; gap: 6px; justify-content: flex-end; }
+@media (min-width: 760px) { .ag-it { grid-template-columns: 36px 1fr auto auto; grid-template-areas: "i t m a"; } }
+.fj-dia { text-align: center; width: 54px; } .fj-dia b { display: block; font-size: 20px; } .fj-dia small { color: var(--tenue, #6b7280); font-size: 11px; }
+.fj-op { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--borde, #e5e7eb); } .fj-op small { display: block; color: var(--tenue, #6b7280); }
+.fj-op.ya { opacity: .55; }
+/* ordenar gastos */
+.og-cats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; } .og-cats > div { background: var(--fondo2, #f3f6f9); border-radius: 10px; padding: 8px 10px; }
+.og-g { margin: 10px 0; } .og-h { font-size: 13px; color: var(--tenue, #6b7280); padding: 4px 0; border-bottom: 1px solid var(--borde, #e5e7eb); }
+.og-r { display: grid; grid-template-columns: 1fr auto minmax(140px, 46%); gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px dashed var(--borde, #e5e7eb); }
+.og-t b { display: block; font-size: 14px; } .og-t small { color: var(--tenue, #6b7280); font-size: 12px; } .og-f { color: var(--tenue, #6b7280); }
+.og-s { width: 100%; }
+@media (max-width: 560px) { .og-cats { grid-template-columns: 1fr; } }
+
+/* copia en Google Drive */
+.dr-aviso { background: #e8f1fb; border: 1px solid #a9c7ec; color: #12365e; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.dr-guia { margin-top: 12px; background: var(--fondo2, #f3f6f9); border-radius: 10px; padding: 8px 12px; }
+.dr-guia ol { margin: 8px 0 4px; padding-left: 20px; line-height: 1.5; } .dr-guia li { margin: 4px 0; }
+
+/* en el celular: los filtros de "Qué hay que pagar" en botoncitos que bajan de renglón, y los gastos fijos como tarjetitas */
+@media (max-width: 600px) {
+  .seg.ag-ver { display: flex; flex-wrap: wrap; gap: 6px; border: 0; border-radius: 0; overflow: visible; }
+  .seg.ag-ver button { border: 2px solid var(--pri); border-radius: 18px; padding: 5px 12px; }
+  .fijos-t thead { display: none; }
+  .fijos-t tr { display: grid; grid-template-columns: 50px minmax(0, 1fr) auto; grid-template-areas: "d n m" "d e a"; gap: 4px 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--borde, #e5e7eb); }
+  .fijos-t td { display: block; border: 0 !important; padding: 0 !important; }
+  .fijos-t td.fj-dia { grid-area: d; width: auto; } .fijos-t td.fj-nom { grid-area: n; } .fijos-t td.fj-imp { grid-area: m; }
+  .fijos-t td.fj-est { grid-area: e; } .fijos-t td.fj-acc { grid-area: a; text-align: right; }
+  .fijos-t td.vacio { grid-column: 1 / -1; }
+  .fijos-t tr:has(td.vacio) { display: block; }
+}

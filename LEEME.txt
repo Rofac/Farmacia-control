@@ -84,3 +84,29 @@ LEER EL IMPORTE SOLO (19/11/2026, versión pag-1.5.0)
   La primera vez que se actualiza baja esos 6 MB (mejor con WiFi).
 - Si algún comprobante de tu banco no lo lee bien, mandame una captura (podés tapar los datos) y lo ajusto.
 
+
+QUÉ HAY QUE PAGAR, GASTOS FIJOS, LOGO Y COPIA EN GOOGLE DRIVE (20/11/2026, versión pag-1.6.0)
+1. QUÉ HAY QUE PAGAR (menú, abajo de Inicio): todo lo que vence, día por día: resúmenes de proveedores, cheques que se
+   debitan, sueldos de los viernes y gastos fijos. Arriba: lo Atrasado, los próximos 7 días y el total.
+   - "Tengo en el banco": poné cuánta plata hay y te marca en rojo desde qué día NO alcanza (y cuánto falta).
+   - Botón Pagar: abre "Cargar pago" ya completo. En los cheques: "Se debitó". En un gasto fijo, la ✕ = "este mes no se paga".
+   - En el Inicio hay una tarjeta con lo más urgente, y la campanita avisa los gastos fijos vencidos.
+2. GASTOS FIJOS (menú, abajo de Gastos): alquiler, internet, Plex, monotributos, cuotas…
+   - "Desde lo que ya pagaste": tildás los gastos del último mes que se repiten y quedan cargados de una.
+   - Cada uno: día que vence, cada cuántos meses, desde/hasta qué mes (ej. última cuota) y si el importe cambia (luz).
+   - Al pagarlo queda marcado como pagado ese mes.
+3. CATEGORÍAS NUEVAS separadas en FARMACIA y PERSONAL. Datos > Configuración > "Ordenar mis gastos": te propone una
+   categoría nueva para cada gasto que ya cargaste (revisás, cambiás lo que quieras y tocás Aplicar). Antes de cambiar
+   nada hace una copia sola. Gastos e Informes muestran por separado lo de la farmacia y lo personal.
+4. LOGO arriba. Tocándolo salen los datos (ROMA AP SRL, CUIT, dirección) con botón Copiar y WhatsApp.
+   Se cambian en Datos > Configuración > Datos de la farmacia.
+5. COPIA EN GOOGLE DRIVE: Datos > Configuración > "Copia automática en Google Drive".
+   - Hay que crear UNA sola vez un "ID de cliente" de Google (gratis, unos 10 minutos desde la compu). La guía paso a
+     paso está en esa misma pantalla. En "Orígenes autorizados" va: https://rofac.github.io
+   - Después: "Conectar con Google Drive" > elegís tu Gmail > si dice "Google no verificó esta app" > Continuar.
+   - Sube la copia completa (con comprobantes) a la carpeta "Farmacia Roma · Copias de Pagos". Quedan las últimas 8.
+   - Cada 7 días (o cada 1 o 3, se elige) aparece en el Inicio "Subir copia a Drive": un toque y listo.
+     (Google no deja subir con la app cerrada, por eso es un toque.)
+   - La app sólo ve esa carpeta, no el resto de tu Drive.
+- ACTUALIZAR: subí todo al repositorio Rofac/Farmacia-control como siempre. Archivos nuevos: static/agenda.js, js/drive.js,
+  img/roma_logo.png e img/roma_ico.png. Los datos del celular no se tocan. Abrí la app 2 veces con internet.

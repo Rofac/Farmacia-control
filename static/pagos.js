@@ -6,6 +6,14 @@ const esPdf = a => /\.pdf$/i.test(a || '');
 const miniComp = (archivo, cls = 'cmp-mini') => !archivo ? `<span class="${cls} sin" title="Sin comprobante">${ico('clip')}</span>`
   : esPdf(archivo) ? `<span class="${cls} pdf" data-ver="${archivo}" title="Ver comprobante">PDF</span>` : `<img class="${cls}" src="${compUrl(archivo, true)}" data-ver="${archivo}" title="Ver comprobante" loading="lazy">`;
 const categoriasGasto = () => (CFG().categorias_gasto || 'Otros').split(',').map(s => s.trim()).filter(Boolean);
+const categoriasPersonales = () => (CFG().categorias_personales || '').split(',').map(s => s.trim()).filter(Boolean);
+const esPersonal = c => categoriasPersonales().includes(c);
+/* <option> de los gastos, separados en Farmacia y Personal */
+const opcionesGasto = (cats, sel) => {
+  const pers = categoriasPersonales(), f = cats.filter(c => !pers.includes(c)), pe = cats.filter(c => pers.includes(c));
+  const o = c => `<option ${c === sel ? 'selected' : ''}>${esc(c)}</option>`;
+  return pe.length ? `<optgroup label="Farmacia">${f.map(o).join('')}</optgroup><optgroup label="Personal">${pe.map(o).join('')}</optgroup>` : cats.map(o).join('');
+};
 const quienPago = p => p.tipo === 'PROVEEDOR' ? p.proveedor : p.tipo === 'SUELDO' ? p.empleado : p.categoria;
 const verArchivo = a => abrirComprobante(a);
 let CACHE = {};
@@ -68,18 +76,18 @@ function nuevaCuenta(luego) {
 /* ---------------------------------------------------------------- cargar / modificar un pago */
 async function cargarPago(pre = {}, luego) {
   const L = await listas(true);
-  const p = pre.id ? await api('/api/pagos/' + pre.id) : { tipo: pre.tipo || 'PROVEEDOR', fecha: pre.fecha || hoy(), medio: 'TRANSFERENCIA', importe: pre.importe || '', periodo: pre.periodo, adelanto: pre.adelanto ? 1 : 0, proveedor_id: pre.proveedor_id || '',
-    empleado_id: pre.empleado_id || '', categoria: pre.categoria || '', operacion: pre.operacion || '', concepto: pre.concepto || '', cuenta_id: (() => { try { return +localStorage.getItem('ultCuenta') || ''; } catch (e) { return ''; } })(), adjuntos: [] };
+  const p = pre.id ? await api('/api/pagos/' + pre.id) : { tipo: pre.tipo || 'PROVEEDOR', fecha: pre.fecha || hoy(), medio: pre.medio || 'TRANSFERENCIA', importe: pre.importe || '', periodo: pre.periodo, adelanto: pre.adelanto ? 1 : 0, proveedor_id: pre.proveedor_id || '',
+    empleado_id: pre.empleado_id || '', categoria: pre.categoria || '', operacion: pre.operacion || '', concepto: pre.concepto || '', cuenta_id: pre.cuenta_id || (() => { try { return +localStorage.getItem('ultCuenta') || ''; } catch (e) { return ''; } })(), adjuntos: [] };
   let tipo = p.tipo;
   const provs = L.prov.filter(x => x.activo || x.id === p.proveedor_id), emps = L.emp.filter(x => x.activo || x.id === p.empleado_id);
   const ctas = L.cuentas.filter(x => x.activo || x.id === p.cuenta_id);
   const cats = categoriasGasto(); if (p.categoria && !cats.includes(p.categoria)) cats.push(p.categoria);
   const mesAnt = (() => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - (d.getDate() < 15 ? 1 : 0)); return MESES[d.getMonth()] + ' ' + d.getFullYear(); })();
-  const m = modal(pre.id ? 'Modificar pago' : 'Cargar pago', `
+  const m = modal(pre.id ? 'Modificar pago' : 'Cargar pago', `${pre.fijo_id ? `<div class="aviso" style="margin-bottom:10px">${ico('reloj')}<span>Gasto fijo: <b>${esc(pre.fijo_nombre || '')}</b> de ${esc(pre.fijo_mes || pre.fijo_periodo || '')}${pre.variable ? ' · el importe es aproximado: poné el que pagaste' : ''}</span></div>` : ''}
     <div class="seg grande" id="cpT">${['PROVEEDOR', 'GASTO', 'SUELDO'].map(t => `<button type="button" data-t="${t}" class="${t === tipo ? 'act' : ''}">${ico(TIPO_ICO[t])} ${t === 'PROVEEDOR' ? 'A un proveedor' : t === 'GASTO' ? 'Un gasto' : 'Un sueldo'}</button>`).join('')}</div>
     <div class="g" style="margin-top:12px">
       <div class="t-PROVEEDOR"><label>Proveedor</label><select id="cpP"><option value="">Elegí…</option>${provs.map(x => `<option value="${x.id}" ${x.id === +p.proveedor_id ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select></div>
-      <div class="t-GASTO"><label>Gasto</label><select id="cpC"><option value="">Elegí…</option>${cats.map(c => `<option ${c === p.categoria ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
+      <div class="t-GASTO"><label>Gasto</label><select id="cpC"><option value="">Elegí…</option>${opcionesGasto(cats, p.categoria)}</select></div>
       <div class="t-SUELDO"><label>Empleado</label><div class="inl" style="flex-wrap:nowrap;gap:6px"><select id="cpE"><option value="">Elegí…</option>${emps.map(x => `<option value="${x.id}" ${x.id === +p.empleado_id ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select>
         <button type="button" class="ab" id="cpEN" title="Agregar empleado">${ico('plus')}</button></div></div>
       <div><label>Fecha del pago</label><input type="date" id="cpF" value="${esc(p.fecha)}"></div>
@@ -150,6 +158,7 @@ async function cargarPago(pre = {}, luego) {
       adelanto: tipo === 'SUELDO' && $('#cpAd', m).checked ? 1 : 0,
       cheque_numero: $('#cpChN', m).value, cheque_fecha_pago: $('#cpChF', m).value,
       acreditado: $('#cpAc', m) && $('#cpAc', m).checked ? 1 : 0 };
+    if (pre.fijo_id) { d.fijo_id = tipo === 'GASTO' ? pre.fijo_id : 0; d.fijo_periodo = pre.fijo_periodo; }
     const btn = $('#cpOk', m); btn.disabled = true;
     try {
       const r = await apiConfirmando('/api/pagos', d); if (!r) { btn.disabled = false; return; }

@@ -243,6 +243,7 @@ async function tarjetaCopia(el) {
 }
 window.RespaldoUI = { enganchar(main, id, irConfig) {
   if (id !== 'principal') return;
+  if (window.Drive && Drive.listo()) { Drive.enganchar(main); return; }     // con Google Drive conectado, el aviso es para subir ahí
   const ult = SRV.ultimaCopia(), n = SRV.resumen(); if (!n.pagos) return;
   const dias = ult ? Math.round((new Date(hoy()) - new Date(ult.slice(0, 10))) / 864e5) : null;
   if (dias !== null && dias <= 7) return;

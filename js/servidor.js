@@ -9,7 +9,10 @@ const SRV = (() => {
   const MEDIOS = { TRANSFERENCIA: 'Transferencia', DEPOSITO: 'Depósito', EFECTIVO: 'Efectivo', CHEQUE: 'Cheque', ECHEQ: 'eCheq', DEBITO: 'Débito automático', TARJETA: 'Tarjeta', OTRO: 'Otro' };
   const DEFAULT_CONFIG = {
     nombre_negocio: 'Farmacia Roma',
-    categorias_gasto: 'Alquiler,Internet,Luz,Agua,Gas,Teléfono,Impuestos,Contador,Limpieza,Mantenimiento,Seguro,Personales,Otros',
+    categorias_gasto: 'Alquiler farmacia,Internet y teléfono,Luz,Agua,Gas,Sistema Plex,Impuestos,Monotributos y autónomos,Sueldos y comisiones,Contador,Seguro,Limpieza,Equipamiento y mantenimiento,Obra y construcción,Compras a proveedores,Otros,Alquiler casa,Tarjetas,Salud,Vehículos,Comidas,Super y casa,Educación,Mascotas,Personales',
+    categorias_personales: 'Alquiler casa,Tarjetas,Salud,Vehículos,Comidas,Super y casa,Educación,Mascotas,Personales',
+    razon_social: 'ROMA AP SRL', cuit: '33-71797264-9', direccion: 'Av. Juan Manuel de Rosas esq. Libertad', localidad: 'Villa Berthet, Chaco', telefono_farmacia: '', email_farmacia: '',
+    saldo_banco: '', saldo_banco_fecha: '', drive_client_id: '', drive_cada: '7',
     dias_aviso_acreditar: '5', sueldo_valor_dia: '24000', sueldo_dias: '7', sueldo_cena: '12000', celular: '0', turnos_confirmado_hasta: '2027-12-31',
   };
   const PROVEEDORES_INICIALES = ['Droguería del Sud', 'Cofaral', 'Monroe Americana'];
@@ -51,11 +54,15 @@ CREATE INDEX IF NOT EXISTS idx_eventos ON eventos(fecha);
 CREATE TABLE IF NOT EXISTS cheques (id INTEGER PRIMARY KEY AUTOINCREMENT, tipo TEXT DEFAULT 'FISICO', numero TEXT DEFAULT '', cuenta_id INTEGER REFERENCES cuentas(id),
   proveedor_id INTEGER REFERENCES proveedores(id), a_quien TEXT DEFAULT '', importe REAL NOT NULL, emision TEXT NOT NULL, fecha_pago TEXT NOT NULL,
   estado TEXT DEFAULT 'PENDIENTE', debitado_fecha TEXT DEFAULT '', pago_id INTEGER REFERENCES pagos(id), notas TEXT DEFAULT '', anulado_motivo TEXT DEFAULT '', creado TEXT);
-CREATE INDEX IF NOT EXISTS idx_cheques ON cheques(estado, fecha_pago);`;
+CREATE INDEX IF NOT EXISTS idx_cheques ON cheques(estado, fecha_pago);
+CREATE TABLE IF NOT EXISTS gastos_fijos (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL, categoria TEXT DEFAULT '', importe REAL DEFAULT 0, dia INTEGER DEFAULT 1,
+  cada INTEGER DEFAULT 1, desde TEXT DEFAULT '', hasta TEXT DEFAULT '', cuenta_id INTEGER REFERENCES cuentas(id), medio TEXT DEFAULT 'TRANSFERENCIA', variable INTEGER DEFAULT 0,
+  notas TEXT DEFAULT '', activo INTEGER DEFAULT 1, creado TEXT);
+CREATE TABLE IF NOT EXISTS gastos_fijos_salteados (fijo_id INTEGER NOT NULL, periodo TEXT NOT NULL, PRIMARY KEY (fijo_id, periodo));`;
   const MIGRACIONES = {
     empleados: [['valor_dia', 'REAL DEFAULT 0'], ['dias_semana', 'REAL DEFAULT 7'], ['cena', 'REAL DEFAULT 0'], ['saldo_inicial', 'REAL DEFAULT 0'], ['cuenta_desde', "TEXT DEFAULT ''"],
       ['vac_dias', 'INTEGER DEFAULT 14'], ['ingreso', "TEXT DEFAULT ''"]],
-    pagos: [['adelanto', 'INTEGER DEFAULT 0']],
+    pagos: [['adelanto', 'INTEGER DEFAULT 0'], ['fijo_id', 'INTEGER'], ['fijo_periodo', "TEXT DEFAULT ''"]],
   };
 
   class ErrorNegocio extends Error {}
@@ -138,7 +145,13 @@ CREATE INDEX IF NOT EXISTS idx_cheques ON cheques(estado, fecha_pago);`;
       const ex = q(`PRAGMA table_info(${t})`).map(c => c.name);
       for (const [c, tipo] of cols) if (!ex.includes(c)) DB.exec(`ALTER TABLE ${t} ADD COLUMN ${c} ${tipo}`);
     }
+    run("UPDATE config SET valor = ? WHERE clave = 'categorias_gasto' AND valor = 'Alquiler,Internet,Luz,Agua,Gas,Teléfono,Impuestos,Contador,Limpieza,Mantenimiento,Seguro,Personales,Otros' AND NOT EXISTS (SELECT 1 FROM pagos WHERE tipo = 'GASTO')", [DEFAULT_CONFIG.categorias_gasto]);
+    const yaTenia = !!q1("SELECT 1 FROM config WHERE clave = 'categorias_gasto'") && !q1("SELECT 1 FROM config WHERE clave = 'categorias_personales'");
     for (const [k, v] of Object.entries(DEFAULT_CONFIG)) run('INSERT OR IGNORE INTO config(clave, valor) VALUES (?, ?)', [k, v]);
+    if (yaTenia) {     // venía de antes con su propia lista: las personales se marcan con "Ordenar mis gastos"
+      const prop = String(getConfig().categorias_gasto || '').split(',').map(s => s.trim()).filter(s => /^personal/i.test(s));
+      run("UPDATE config SET valor = ? WHERE clave = 'categorias_personales'", [prop.join(',')]);
+    }
     const cfg = getConfig();
     run("UPDATE empleados SET cuenta_desde = ? WHERE COALESCE(cuenta_desde,'') = ''", [sabadoDe(hoy())]);
     run('UPDATE empleados SET valor_dia = ?, cena = ? WHERE COALESCE(valor_dia,0) = 0', [_f(cfg.sueldo_valor_dia), _f(cfg.sueldo_cena)]);
@@ -198,6 +211,7 @@ CREATE INDEX IF NOT EXISTS idx_cheques ON cheques(estado, fecha_pago);`;
   ruta('POST', '/api/config', d => {
     for (let [k, v] of Object.entries(d)) if (k in DEFAULT_CONFIG) {
       if (['sueldo_valor_dia', 'sueldo_dias', 'sueldo_cena'].includes(k)) v = String(+r2(num(v)));
+      if (k === 'saldo_banco') continue;      // se cambia desde "Qué hay que pagar"
       run('INSERT OR REPLACE INTO config(clave, valor) VALUES (?, ?)', [k, String(v).trim()]);
     }
     return { ok: true };
@@ -657,6 +671,10 @@ CREATE INDEX IF NOT EXISTS idx_cheques ON cheques(estado, fecha_pago);`;
       run('UPDATE pagos SET tipo=?, fecha=?, importe=?, medio=?, cuenta_id=?, proveedor_id=?, categoria=?, empleado_id=?, periodo=?, concepto=?, operacion=?, notas=?, modificado=?, adelanto=? WHERE id=?', [...par, ahora(), adel, gid]);
     } else gid = run('INSERT INTO pagos(tipo, fecha, importe, medio, cuenta_id, proveedor_id, categoria, empleado_id, periodo, concepto, operacion, notas, acreditado, acreditado_fecha, creado, adelanto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
       [...par, acr, acr ? hoy() : '', ahora(), adel]);
+    if (d.fijo_id !== undefined) {      // pago de un gasto fijo: queda marcado ese mes como pagado
+      const fid = tipo === 'GASTO' && +d.fijo_id && q1('SELECT 1 FROM gastos_fijos WHERE id = ?', [+d.fijo_id]) ? +d.fijo_id : null;
+      run('UPDATE pagos SET fijo_id = ?, fijo_periodo = ? WHERE id = ?', [fid, fid && /^\d{4}-\d{2}$/.test(d.fijo_periodo || '') ? d.fijo_periodo : (fid ? f.slice(0, 7) : ''), gid]);
+    }
     anotar('Pago ' + (d.id ? 'modificado' : 'cargado'), `${tipo.toLowerCase()} ${prov ? prov.nombre : emp ? emp.nombre : cat} ${dmy(f)} ${moneyTxt(imp)}`);
     /* pagado con cheque o eCheq: queda también en la sección Cheques (unido al pago) */
     const ch = q1('SELECT * FROM cheques WHERE pago_id = ?', [gid]);
@@ -846,7 +864,8 @@ CREATE INDEX IF NOT EXISTS idx_cheques ON cheques(estado, fecha_pago);`;
     const totMes = Object.fromEntries(q("SELECT tipo, SUM(importe) AS t FROM pagos WHERE estado = 'ACTIVO' AND substr(fecha,1,7) = ? GROUP BY tipo", [mes]).map(r => [r.tipo, r2(r.t)]));
     const sinComp = val("SELECT COUNT(*) FROM pagos p WHERE estado = 'ACTIVO' AND medio != 'EFECTIVO' AND fecha >= ? AND NOT EXISTS (SELECT 1 FROM adjuntos a WHERE a.pago_id = p.id)", [masDias(h, -60)]);
     const ultimos = q(sqlPagos({})[0] + ' ORDER BY p.creado DESC, p.id DESC LIMIT 8');
-    return { cheques: chequesAviso(), eventos: eventosEntre(h, masDias(h, 30)).slice(0, 6), proveedores: paraPagar, deuda, vence_semana: r2(sum(paraPagar, p => p.vence_semana)), hasta_semana: hs, sin_acreditar: sinAcr, dias_aviso: dias, mes: totMes, sin_comprobante: sinComp, ultimos };
+    const ag = agenda(7);
+    return { agenda: { semana: ag.semana, atrasado: ag.atrasado, n: ag.items.length, items: ag.items.slice(0, 6), saldo: ag.saldo }, cheques: chequesAviso(), eventos: eventosEntre(h, masDias(h, 30)).slice(0, 6), proveedores: paraPagar, deuda, vence_semana: r2(sum(paraPagar, p => p.vence_semana)), hasta_semana: hs, sin_acreditar: sinAcr, dias_aviso: dias, mes: totMes, sin_comprobante: sinComp, ultimos };
   });
   ruta('GET', '/api/avisos', () => {
     const out = [], dias = Math.trunc(num(getConfig().dias_aviso_acreditar || 5));
@@ -855,6 +874,10 @@ CREATE INDEX IF NOT EXISTS idx_cheques ON cheques(estado, fecha_pago);`;
     let venc = 0;
     for (const { id } of q('SELECT id FROM proveedores WHERE activo = 1')) venc += estadoProveedor(id).resumenes.filter(x => x.falta > 0.009 && (x.vencimiento || x.fecha) <= hoy()).length;
     if (venc) out.push({ ico: 'reloj', texto: `${venc} resumen${venc === 1 ? '' : 'es'} vence${venc === 1 ? '' : 'n'} hoy o ya venció`, ir: 'principal' });
+    const fj = fijosEntre(masDias(hoy(), -120), masDias(hoy(), 2), false);
+    const fjAt = fj.filter(x => x.vence < hoy()), fjPr = fj.filter(x => x.vence >= hoy());
+    if (fjAt.length) out.push({ ico: 'alerta', texto: `${fjAt.length} gasto${fjAt.length === 1 ? '' : 's'} fijo${fjAt.length === 1 ? '' : 's'} sin pagar: ${fjAt.slice(0, 3).map(x => x.fijo.nombre).join(', ')}${fjAt.length > 3 ? '…' : ''}`, ir: 'agenda' });
+    if (fjPr.length) out.push({ ico: 'reloj', texto: `Vence${fjPr.length === 1 ? '' : 'n'} en 2 días: ${fjPr.map(x => x.fijo.nombre + ' (' + dmy(x.vence).slice(0, 5) + ')').join(', ')}`, ir: 'agenda' });
     const ch = chequesAviso().hoy, h = hoy();
     const at = ch.filter(c => c.fecha_pago < h), hy = ch.filter(c => c.fecha_pago === h), mn = ch.filter(c => c.fecha_pago > h);
     const tx = l => `${l.length} cheque${l.length === 1 ? '' : 's'} (${moneyTxt(sum(l, c => c.importe))})`;
@@ -890,6 +913,164 @@ CREATE INDEX IF NOT EXISTS idx_cheques ON cheques(estado, fecha_pago);`;
       MEDIOS[p.medio] || p.medio, p.cuenta || '', p.operacion, p.concepto, p.periodo, p.acreditado ? 'Sí ' + dmy(p.acreditado_fecha) : (p.tipo === 'PROVEEDOR' ? 'No' : ''), p.n_adjuntos, p.estado]);
     return new Blob(['﻿' + filas.map(f => f.map(c).join(';')).join('\r\n')], { type: 'text/csv' });
   }
+
+  /* ------------------------------------------------ GASTOS FIJOS (alquiler, internet, Plex, monotributos...): se cargan una vez y quedan "a pagar" cada mes */
+  const MES = f => f.slice(0, 7);
+  const masMeses = (p, n) => { let [y, m] = p.split('-').map(Number); m += n; while (m > 12) { m -= 12; y++; } while (m < 1) { m += 12; y--; } return `${y}-${String(m).padStart(2, '0')}`; };
+  const diaDelMes = (p, dia) => { const [y, m] = p.split('-').map(Number), ult = new Date(y, m, 0).getDate(); return `${p}-${String(Math.min(Math.max(1, dia), ult)).padStart(2, '0')}`; };
+  function pagoDeFijo(fid, periodo) {
+    return q1("SELECT id, fecha, importe FROM pagos WHERE estado = 'ACTIVO' AND fijo_id = ? AND fijo_periodo = ? ORDER BY fecha DESC LIMIT 1", [fid, periodo]);
+  }
+  /* cada gasto fijo, mes por mes, entre dos fechas (los que no se pagaron ni se saltearon) */
+  function fijosEntre(desde, hasta, conPagados) {
+    const out = [];
+    for (const g of q("SELECT f.*, c.nombre AS cuenta FROM gastos_fijos f LEFT JOIN cuentas c ON c.id = f.cuenta_id WHERE f.activo = 1 ORDER BY f.dia, f.nombre COLLATE NOCASE")) {
+      const salt = new Set(q('SELECT periodo FROM gastos_fijos_salteados WHERE fijo_id = ?', [g.id]).map(r => r.periodo));
+      let p = g.desde || MES(hoy());
+      const cada = Math.max(1, +g.cada || 1), fin = MES(hasta);
+      for (let i = 0; p <= fin && i < 400; i++, p = masMeses(p, cada)) {
+        if (g.hasta && p > g.hasta) break;
+        const vence = diaDelMes(p, +g.dia || 1);
+        if (vence > hasta || vence < desde) continue;
+        const pago = pagoDeFijo(g.id, p);
+        if ((pago || salt.has(p)) && !conPagados) continue;
+        out.push({ fijo: g, periodo: p, vence, pago, salteado: salt.has(p) });
+      }
+    }
+    return out;
+  }
+  ruta('GET', '/api/fijos', () => {
+    const h = hoy(), p = MES(h);
+    return q("SELECT f.*, c.nombre AS cuenta FROM gastos_fijos f LEFT JOIN cuentas c ON c.id = f.cuenta_id ORDER BY f.activo DESC, f.dia, f.nombre COLLATE NOCASE").map(g => {
+      /* el mes que corresponde mostrar: el más viejo sin pagar desde que empezó, o el de este mes */
+      const pend = g.activo ? fijosEntre(diaDelMes(g.desde || p, 1), diaDelMes(masMeses(p, 1), 31), false).filter(x => x.fijo.id === g.id) : [];
+      const actual = pend.find(x => x.periodo <= p) || pend[0] || null;
+      const esteMes = pagoDeFijo(g.id, p);
+      const ult = q1("SELECT fecha, importe FROM pagos WHERE estado = 'ACTIVO' AND fijo_id = ? ORDER BY fecha DESC LIMIT 1", [g.id]);
+      return Object.assign(g, { proximo: actual && { periodo: actual.periodo, vence: actual.vence, vencido: actual.vence < h, dias: entreDias(h, actual.vence) },
+        pagado_mes: esteMes, ultimo_pago: ult, salteado_mes: !!q1('SELECT 1 FROM gastos_fijos_salteados WHERE fijo_id = ? AND periodo = ?', [g.id, p]) });
+    });
+  });
+  ruta('POST', '/api/fijos', d => {
+    const nombre = txt(d.nombre, 60); if (!nombre) E('Ponele un nombre (ej. Alquiler, Internet Starlink)');
+    const cat = txt(d.categoria, 40); if (!cat) E('Elegí qué gasto es');
+    const dia = Math.trunc(num(d.dia)); if (!(dia >= 1 && dia <= 31)) E('El día del mes tiene que ser de 1 a 31');
+    const imp = num(d.importe); if (!(imp >= 0)) E('Importe inválido');
+    const cada = [1, 2, 3, 6, 12].includes(+d.cada) ? +d.cada : 1;
+    const desde = /^\d{4}-\d{2}$/.test(d.desde || '') ? d.desde : MES(hoy()), hasta = /^\d{4}-\d{2}$/.test(d.hasta || '') ? d.hasta : '';
+    const medio = MEDIOS[String(d.medio || '').toUpperCase()] ? String(d.medio).toUpperCase() : 'TRANSFERENCIA';
+    const cuenta = +d.cuenta_id || null;
+    const par = [nombre, cat, r2(imp), dia, cada, desde, hasta, cuenta, medio, d.variable ? 1 : 0, String(d.notas || '').trim().slice(0, 300)];
+    let id = +d.id || 0;
+    if (id) run('UPDATE gastos_fijos SET nombre=?, categoria=?, importe=?, dia=?, cada=?, desde=?, hasta=?, cuenta_id=?, medio=?, variable=?, notas=?, activo=1 WHERE id=?', [...par, id]);
+    else id = run('INSERT INTO gastos_fijos(nombre, categoria, importe, dia, cada, desde, hasta, cuenta_id, medio, variable, notas, creado) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', [...par, ahora()]);
+    anotar('Gasto fijo ' + (d.id ? 'modificado' : 'agregado'), `${nombre} · día ${dia} · ${moneyTxt(imp)}`);
+    return { ok: true, id };
+  });
+  ruta('DELETE', '/api/fijos/<int>', (d, id) => {
+    const g = q1('SELECT * FROM gastos_fijos WHERE id = ?', [+id]);
+    if (g) { run('UPDATE gastos_fijos SET activo = 0 WHERE id = ?', [+id]); anotar('Gasto fijo dado de baja', g.nombre); }
+    return { ok: true };
+  });
+  ruta('POST', '/api/fijos/<int>/saltear', (d, id) => {
+    const p = /^\d{4}-\d{2}$/.test(d.periodo || '') ? d.periodo : E('Falta el mes');
+    if (d.volver) run('DELETE FROM gastos_fijos_salteados WHERE fijo_id = ? AND periodo = ?', [+id, p]);
+    else run('INSERT OR IGNORE INTO gastos_fijos_salteados(fijo_id, periodo) VALUES (?, ?)', [+id, p]);
+    return { ok: true };
+  });
+
+  /* ------------------------------------------------ QUÉ HAY QUE PAGAR, día por día (resúmenes, cheques, sueldos y gastos fijos) */
+  function agenda(dias) {
+    const h = hoy(), hasta = masDias(h, dias), desdeAtras = masDias(h, -120), items = [];
+    for (const p of q('SELECT * FROM proveedores WHERE activo = 1')) {
+      for (const x of estadoProveedor(p.id).resumenes.filter(x => x.falta > 0.009)) {
+        const f = x.vencimiento || x.fecha; if (f > hasta) continue;
+        items.push({ tipo: 'RESUMEN', fecha: f, importe: x.falta, titulo: p.nombre, detalle: `Resumen del ${dmy(x.fecha)}${x.numero ? ' · N° ' + x.numero : ''}${x.pagado > 0.009 ? ' · falta ' + moneyTxt(x.falta) + ' de ' + moneyTxt(x.importe) : ''}`, proveedor_id: p.id, resumen_id: x.id });
+      }
+    }
+    for (const c of q("SELECT ch.*, v.nombre AS proveedor, cu.nombre AS cuenta FROM cheques ch LEFT JOIN proveedores v ON v.id = ch.proveedor_id LEFT JOIN cuentas cu ON cu.id = ch.cuenta_id WHERE ch.estado = 'PENDIENTE' AND ch.fecha_pago <= ? ORDER BY ch.fecha_pago", [hasta]))
+      items.push({ tipo: 'CHEQUE', fecha: c.fecha_pago, importe: c.importe, titulo: (c.tipo === 'ECHEQ' ? 'eCheq' : 'Cheque') + (c.numero ? ' N° ' + c.numero : ''), detalle: `${c.proveedor || c.a_quien || ''}${c.cuenta ? ' · se debita de ' + c.cuenta : ''}`, cheque_id: c.id, cuenta: c.cuenta || '' });
+    for (const e of q('SELECT * FROM empleados WHERE activo = 1 AND (COALESCE(valor_dia,0) > 0 OR COALESCE(saldo_inicial,0) != 0)')) {
+      let v = viernesDe(h);
+      for (let i = 0; v <= hasta && i < 10; i++, v = masDias(v, 7)) {
+        const est = estadoEmpleado(e, v), imp = i === 0 ? est.a_pagar : est.semana.total;
+        if (imp > 0.009) items.push({ tipo: 'SUELDO', fecha: v, importe: r2(imp), titulo: e.nombre, detalle: i === 0 ? 'Sueldo de esta semana' + (est.pagado > 0.009 ? ' (ya le pagaste ' + moneyTxt(est.pagado) + ')' : '') : 'Sueldo semana ' + dmy(masDias(v, -6)).slice(0, 5) + ' al ' + dmy(v).slice(0, 5) + ' (estimado)', empleado_id: e.id, viernes: v });
+      }
+    }
+    for (const x of fijosEntre(desdeAtras, hasta, false))
+      items.push({ tipo: 'FIJO', fecha: x.vence, importe: x.fijo.importe, titulo: x.fijo.nombre, detalle: `${x.fijo.categoria} · ${MESES_TXT[+x.periodo.slice(5) - 1]}${x.fijo.variable ? ' · importe aproximado' : ''}${x.fijo.cuenta ? ' · ' + x.fijo.cuenta : ''}`, fijo_id: x.fijo.id, periodo: x.periodo, categoria: x.fijo.categoria, medio: x.fijo.medio, cuenta_id: x.fijo.cuenta_id, variable: x.fijo.variable });
+    for (const it of items) it.atrasado = it.fecha < h;
+    items.sort((a, b) => a.fecha.localeCompare(b.fecha) || b.importe - a.importe);
+    const cfg = getConfig(), saldo = cfg.saldo_banco === '' ? null : num(cfg.saldo_banco);
+    return { hoy: h, hasta, items, saldo, saldo_fecha: cfg.saldo_banco_fecha || '', total: r2(sum(items, x => x.importe)),
+      atrasado: r2(sum(items.filter(x => x.atrasado), x => x.importe)), semana: r2(sum(items.filter(x => x.fecha <= masDias(h, 7)), x => x.importe)) };
+  }
+  const MESES_TXT = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  ruta('GET', '/api/agenda', (d, args) => agenda(Math.min(120, Math.max(7, +(args && args.get('dias')) || 30))));
+  ruta('POST', '/api/agenda/saldo', d => {
+    const v = String(d.saldo ?? '').trim();
+    run("INSERT OR REPLACE INTO config(clave, valor) VALUES ('saldo_banco', ?)", [v === '' ? '' : String(r2(num(v)))]);
+    run("INSERT OR REPLACE INTO config(clave, valor) VALUES ('saldo_banco_fecha', ?)", [v === '' ? '' : hoy()]);
+    return { ok: true };
+  });
+
+  /* ------------------------------------------------ ORDENAR LAS CATEGORÍAS DE GASTOS (propuesta a partir de lo cargado) */
+  const CAT_FARMACIA = ['Alquiler farmacia', 'Internet y teléfono', 'Luz', 'Agua', 'Gas', 'Sistema Plex', 'Impuestos', 'Monotributos y autónomos', 'Sueldos y comisiones',
+    'Contador', 'Seguro', 'Limpieza', 'Equipamiento y mantenimiento', 'Obra y construcción', 'Compras a proveedores', 'Otros'];
+  const CAT_PERSONAL = ['Alquiler casa', 'Tarjetas', 'Salud', 'Vehículos', 'Comidas', 'Super y casa', 'Educación', 'Mascotas', 'Personales'];
+  const sinTilde = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  function sugerirCategoria(cat, concepto) {
+    const c = sinTilde(cat), t = sinTilde(concepto), ambos = c + ' ' + t, tiene = re => re.test(ambos);
+    if (/alquiler/.test(c)) return /hogar|casa|depto|departamento/.test(t) ? 'Alquiler casa' : 'Alquiler farmacia';
+    if (/plex/.test(ambos)) return 'Sistema Plex';
+    if (/internet|telefono|starlink|celular|wifi/.test(c) || /starlink|internet|wifi/.test(t)) return 'Internet y teléfono';
+    if (/^luz|energia|secheep/.test(c) || /\bluz\b|secheep/.test(t)) return 'Luz';
+    if (/^agua/.test(c) || /\bagua\b|sameep|bidon/.test(t)) return 'Agua';
+    if (/^gas/.test(c)) return 'Gas';
+    if (tiene(/monotributo|autonomo/)) return 'Monotributos y autónomos';
+    if (/impuesto|arca|afip|iibb|ii ?bb|ingresos brutos|municipal|tasa/.test(c) || /arca|afip|iibb|ii ?bb|ingresos brutos/.test(t)) return 'Impuestos';
+    if (/sueldo|comision|aguinaldo/.test(c)) return 'Sueldos y comisiones';
+    if (/contador/.test(ambos)) return 'Contador';
+    if (/seguro/.test(c)) return 'Seguro';
+    if (tiene(/toyota|nafta|combustible|moto|auto\b|lavado auto|patente|cubierta|taller|mecanic/)) return 'Vehículos';
+    if (/limpieza/.test(c)) return /acolchado|ropa|casa/.test(t) ? 'Super y casa' : 'Limpieza';
+    if (/construc|obra/.test(c) || /techad|albañil|albanil|construc|obra\b|materiales|frasco/.test(t)) return 'Obra y construcción';
+    if (/heladera|exhibidora|termo|luces|mantel|mueble|equipo|aire|reparac|manten|arreglo/.test(ambos)) return 'Equipamiento y mantenimiento';
+    if (/naranja|visa|master|tarjeta|resumen/.test(t) && /personal|otro|tarjeta/.test(c)) return 'Tarjetas';
+    if (/dentist|medic|odont|farmacia personal|analisis|clinica|salud/.test(t) || /salud/.test(c)) return 'Salud';
+    if (/comida|almuerzo|cena|restaurant|delivery/.test(ambos)) return 'Comidas';
+    if (/ingles|colegio|escuela|curso|cuota escolar|facultad|educacion/.test(ambos)) return 'Educación';
+    if (/veterin|mascota|perro|gato/.test(ambos)) return 'Mascotas';
+    if (/verduler|chino|super|carnic|almacen|mercado\b/.test(ambos)) return 'Super y casa';
+    if (/farmar|barrichi|adn\b|lidherma|droguer|laborat|cosmet/.test(t)) return 'Compras a proveedores';
+    if (/personal/.test(c)) return 'Personales';
+    if (/^otros?$/.test(c)) return 'Otros';
+    return cat || 'Otros';
+  }
+  const listaCfg = k => String(getConfig()[k] || '').split(',').map(s => s.trim()).filter(Boolean);
+  ruta('GET', '/api/gastos/ordenar', () => {
+    const grupos = q("SELECT categoria, concepto, COUNT(*) AS n, SUM(importe) AS total, MAX(fecha) AS ultima FROM pagos WHERE tipo = 'GASTO' AND estado = 'ACTIVO' GROUP BY categoria, concepto ORDER BY categoria COLLATE NOCASE, total DESC");
+    for (const g of grupos) { g.total = r2(g.total); g.sugerida = sugerirCategoria(g.categoria, g.concepto); }
+    const fijos = q('SELECT id, nombre, categoria FROM gastos_fijos WHERE activo = 1');
+    for (const f of fijos) f.sugerida = sugerirCategoria(f.categoria, f.nombre);
+    return { grupos, fijos, farmacia: CAT_FARMACIA, personal: CAT_PERSONAL, actuales: listaCfg('categorias_gasto'), personales_actuales: listaCfg('categorias_personales') };
+  });
+  ruta('POST', '/api/gastos/ordenar', d => {
+    const cats = (d.categorias || []).map(s => txt(s, 40)).filter(Boolean), pers = (d.personales || []).map(s => txt(s, 40)).filter(s => cats.includes(s));
+    if (!cats.length) E('Faltan las categorías');
+    let n = 0;
+    for (const c of d.cambios || []) {
+      const a = txt(c.a, 40); if (!a || !cats.includes(a)) continue;
+      const de = String(c.categoria ?? ''), con = String(c.concepto ?? '');
+      run("UPDATE pagos SET categoria = ? WHERE tipo = 'GASTO' AND categoria = ? AND COALESCE(concepto,'') = ?", [a, de, con]);
+      n += val('SELECT changes()');
+    }
+    for (const f of d.fijos || []) { const a = txt(f.a, 40); if (a && cats.includes(a)) run('UPDATE gastos_fijos SET categoria = ? WHERE id = ?', [a, +f.id]); }
+    run("INSERT OR REPLACE INTO config(clave, valor) VALUES ('categorias_gasto', ?)", [cats.join(',')]);
+    run("INSERT OR REPLACE INTO config(clave, valor) VALUES ('categorias_personales', ?)", [pers.join(',')]);
+    anotar('Categorías de gastos ordenadas', `${n} pagos cambiados de categoría`);
+    return { ok: true, cambiados: n };
+  });
 
   /* ------------------------------------------------ copias: el mismo .zip que la PC (datos/pagos.db + datos/adjuntos) */
   async function copiaZip() {

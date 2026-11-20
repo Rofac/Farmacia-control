@@ -12,6 +12,10 @@ P.principal = async (main) => {
       <div class="kpi" style="--c:var(--violeta)" data-ir="pagos" data-a="sinacreditar"><small>Pagado y todavía sin acreditar</small><b>${money(tv)}</b><div class="det">${d.sin_acreditar.length} pago${d.sin_acreditar.length === 1 ? '' : 's'}</div></div>
       <div class="kpi" style="--c:var(--turquesa)"><small>Pagado en ${MESES[+hoy().slice(5, 7) - 1].toLowerCase()}</small><b>${money((d.mes.PROVEEDOR || 0) + (d.mes.GASTO || 0) + (d.mes.SUELDO || 0))}</b>
         <div class="det">Proveedores ${money0(d.mes.PROVEEDOR || 0)} · gastos ${money0(d.mes.GASTO || 0)} · sueldos ${money0(d.mes.SUELDO || 0)}</div></div></div>
+    ${d.agenda && d.agenda.n ? `<div class="card ag-ini" data-ir="agenda" style="cursor:pointer;border-left:5px solid ${d.agenda.atrasado > 0.009 ? 'var(--rojo)' : 'var(--naranja)'}">
+      <div class="inl" style="justify-content:space-between"><b>${ico('cal')} Qué hay que pagar</b><span class="muted chico">Próximos 7 días: <b>${money0(d.agenda.semana)}</b>${d.agenda.atrasado > 0.009 ? ` · <b class="neg">atrasado ${money0(d.agenda.atrasado)}</b>` : ''}</span></div>
+      ${d.agenda.items.map(x => `<div class="pend-r"><span><b class="${x.atrasado ? 'neg' : ''}">${x.atrasado ? 'Atrasado' : diaTxt(x.fecha)}</b> · ${esc(x.titulo)}${x.tipo === 'FIJO' && x.atrasado && x.periodo ? ' (' + MESES_MIN[+x.periodo.slice(5) - 1] + ')' : ''}</span><b>${money0(x.importe)}</b></div>`).join('')}
+      <div class="muted chico" style="margin-top:6px">Tocá para ver todo, día por día →</div></div>` : ''}
     ${d.cheques && d.cheques.semana_n ? `<div class="card ch-ini" data-ir="cheques" style="cursor:pointer;border-left:5px solid ${d.cheques.hoy.length ? 'var(--rojo)' : 'var(--naranja)'}">
       <div class="inl" style="justify-content:space-between"><b>${ico('cheque')} Cheques</b><span class="muted chico">En 7 días se debitan <b>${money0(d.cheques.semana)}</b> (${d.cheques.semana_n})</span></div>
       ${d.cheques.hoy.map(c => `<div class="pend-r"><span><b class="${c.dias < 0 ? 'neg' : ''}">${c.dias < 0 ? '¿Ya se debitó? (' + dm(c.fecha_pago) + ')' : c.dias === 0 ? 'HOY' : 'Mañana'}</b> · ${esc(c.quien)}${c.numero ? ' · N° ' + esc(c.numero) : ''}</span><b>${money0(c.importe)}</b></div>`).join('')
@@ -176,12 +180,16 @@ P.gastos = async (main) => {
   main.innerHTML = cabecera('peso', 'Gastos', 'Alquiler, internet, luz, impuestos y gastos personales que salen de la cuenta de la farmacia',
     `<button class="btn verde grande" id="gaN">${ico('plus')} Cargar gasto</button>`) + filtroMes() +
     `<div class="kpis"><div class="kpi" style="--c:var(--pri)"><small>Total de gastos</small><b>${money(l.reduce((a, p) => a + p.importe, 0))}</b><div class="det">${l.length} pagos</div></div>
+      ${l.some(p => esPersonal(p.categoria)) ? `<div class="kpi" style="--c:var(--verde, #1f9d55)"><small>De la farmacia</small><b>${money(l.filter(p => !esPersonal(p.categoria)).reduce((a, p) => a + p.importe, 0))}</b></div>
+      <div class="kpi" style="--c:var(--violeta)"><small>Personales</small><b>${money(l.filter(p => esPersonal(p.categoria)).reduce((a, p) => a + p.importe, 0))}</b></div>` : ''}
       ${Object.entries(porCat).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c, t]) => `<div class="kpi" style="--c:var(--turquesa)"><small>${esc(c)}</small><b>${money(t)}</b></div>`).join('')}</div>
     <div class="card"><div class="tabla-x"><table class="t comp"><thead><tr><th>Fecha</th><th>Gasto</th><th class="r">Importe</th><th>Cómo / desde</th><th class="ocultar-movil">N° operación</th><th>Comp.</th><th></th></tr></thead>
       <tbody>${l.map(filaPago).join('') || '<tr><td colspan="7" class="vacio">No hay gastos en esas fechas</td></tr>'}</tbody></table></div></div>
-    <div class="ayuda">Los tipos de gasto (Alquiler, Internet…) se cambian en Datos > Configuración.</div>`;
+    <div class="ayuda">Los tipos de gasto (Alquiler, Internet…) se cambian en Datos > Configuración. <a href="#" id="gaOrd"><b>Ordenar mis gastos</b></a> · <a href="#" id="gaFij"><b>Gastos fijos</b></a></div>`;
   engancharFiltroMes(re);
   $('#gaN').onclick = () => cargarPago({ tipo: 'GASTO' }, re);
+  $('#gaOrd').onclick = e => { e.preventDefault(); ordenarGastos(); };
+  $('#gaFij').onclick = e => { e.preventDefault(); ir('fijos'); };
   main.onclick = e => { const v = e.target.closest('[data-ver]'); if (v) return verArchivo(v.dataset.ver); const r = e.target.closest('[data-g]'); if (r) verPago(+r.dataset.g, re); };
 };
 
@@ -321,12 +329,13 @@ P.informes = async (main) => {
       <div><label>Desde</label><input type="date" id="iD" value="${INF.desde}"></div><div><label>Hasta</label><input type="date" id="iH" value="${INF.hasta}"></div></div>
     <div class="kpis"><div class="kpi" style="--c:var(--pri)"><small>Total pagado</small><b>${money(t.total)}</b></div>
       <div class="kpi" style="--c:var(--rojo)"><small>A proveedores</small><b>${money(t.PROVEEDOR)}</b><div class="det">facturado en el período ${money0(r.facturado_proveedores)}</div></div>
-      <div class="kpi" style="--c:var(--naranja)"><small>Gastos</small><b>${money(t.GASTO)}</b></div><div class="kpi" style="--c:var(--violeta)"><small>Sueldos</small><b>${money(t.SUELDO)}</b></div></div>
+      <div class="kpi" style="--c:var(--naranja)"><small>Gastos</small><b>${money(t.GASTO)}</b>${(() => { const pe = r.por_categoria.filter(x => esPersonal(x.nombre)).reduce((a, x) => a + x.total, 0);
+        return pe > 0.009 ? `<div class="det">Farmacia ${money0((t.GASTO || 0) - pe)} · Personal ${money0(pe)}</div>` : ''; })()}</div><div class="kpi" style="--c:var(--violeta)"><small>Sueldos</small><b>${money(t.SUELDO)}</b></div></div>
     <div class="card"><h3>${ico('chart')} Por ${INF.agrupar === 'anio' ? 'año' : 'mes'}</h3>${r.periodos.length > 1 ? barras(r.periodos.map(x => ({ v: x.total, l: INF.agrupar === 'anio' ? x.periodo : MESES[+x.periodo.slice(5) - 1].slice(0, 3), t: et(x.periodo) })), money0) : ''}
       <div class="tabla-x" style="margin-top:10px"><table class="t comp"><thead><tr><th>Período</th><th class="r">Proveedores</th><th class="r">Gastos</th><th class="r">Sueldos</th><th class="r">Total</th></tr></thead><tbody>
       ${r.periodos.slice().reverse().map(x => `<tr><td>${et(x.periodo)}</td><td class="r">${money(x.PROVEEDOR)}</td><td class="r">${money(x.GASTO)}</td><td class="r">${money(x.SUELDO)}</td><td class="r"><b>${money(x.total)}</b></td></tr>`).join('') || '<tr><td colspan="5" class="vacio">Sin pagos</td></tr>'}</tbody>
       ${r.periodos.length ? `<tfoot><tr><td>TOTAL</td><td class="r">${money(t.PROVEEDOR)}</td><td class="r">${money(t.GASTO)}</td><td class="r">${money(t.SUELDO)}</td><td class="r">${money(t.total)}</td></tr></tfoot>` : ''}</table></div></div>
-    <div class="cols2"><div>${tabla('A cada proveedor', 'edificio', r.por_proveedor)}${tabla('Gastos por tipo', 'peso', r.por_categoria)}</div>
+    <div class="cols2"><div>${tabla('A cada proveedor', 'edificio', r.por_proveedor)}${tabla('Gastos de la farmacia', 'peso', r.por_categoria.filter(x => !esPersonal(x.nombre)))}${r.por_categoria.some(x => esPersonal(x.nombre)) ? tabla('Gastos personales', 'home', r.por_categoria.filter(x => esPersonal(x.nombre))) : ''}</div>
       <div>${tabla('Desde dónde salió la plata', 'card', r.por_cuenta)}${tabla('Sueldos por empleado', 'users', r.por_empleado)}${tabla('Por medio de pago', 'recibo', r.por_medio.map(x => ({ ...x, nombre: MEDIOS[x.nombre] || x.nombre })))}</div></div>`;
   const re = () => ir('informes');
   $$('#iAg [data-v]').forEach(b => b.onclick = () => { INF.agrupar = b.dataset.v; re(); });
@@ -358,18 +367,29 @@ P.config = async (main) => {
   const c = await api('/api/config');
   main.innerHTML = cabecera('conf', 'Configuración', '', `<button class="btn verde grande" id="cfOk">${ico('check')} Guardar</button>`) +
     `<div class="card"><h3>${ico('edificio')} Datos</h3><div class="g"><div><label>Nombre de la farmacia</label><input name="nombre_negocio" value="${esc(c.nombre_negocio)}"></div>
+      <div><label>Razón social</label><input name="razon_social" value="${esc(c.razon_social || '')}"></div>
+      <div><label>CUIT</label><input name="cuit" value="${esc(c.cuit || '')}" inputmode="numeric"></div>
+      <div><label>Dirección</label><input name="direccion" value="${esc(c.direccion || '')}"></div>
+      <div><label>Localidad</label><input name="localidad" value="${esc(c.localidad || '')}"></div>
+      <div><label>Teléfono (opcional)</label><input name="telefono_farmacia" value="${esc(c.telefono_farmacia || '')}" inputmode="tel"></div>
+      <div><label>Email (opcional)</label><input name="email_farmacia" value="${esc(c.email_farmacia || '')}" inputmode="email"></div>
       <div><label>Avisar si un pago no se acreditó en (días)</label><input name="dias_aviso_acreditar" inputmode="numeric" value="${esc(c.dias_aviso_acreditar)}"></div>
-      <div class="full"><label>Tipos de gasto (separados por coma)</label><input name="categorias_gasto" value="${esc(c.categorias_gasto)}"></div></div></div>
+      <div class="full"><label>Tipos de gasto de la farmacia y personales (separados por coma)</label><input name="categorias_gasto" value="${esc(c.categorias_gasto)}"></div>
+      <div class="full"><label>Cuáles son personales (separados por coma)</label><input name="categorias_personales" value="${esc(c.categorias_personales || '')}">
+        <div class="ayuda">Los personales se muestran aparte en Gastos e Informes. <a href="#" id="cfOrd"><b>Ordenar mis gastos</b></a>: te propone cómo reacomodar lo ya cargado.</div></div></div></div>
     <div class="card"><h3>${ico('users')} Sueldos (lo que se propone a cada empleado nuevo)</h3><div class="g">
       <div><label>Por día</label>${campoMonto('name="sueldo_valor_dia"', aNum(c.sueldo_valor_dia))}</div>
       <div><label>Días por semana</label><input name="sueldo_dias" inputmode="decimal" value="${esc(c.sueldo_dias)}"></div>
       <div><label>Cena cuando hacen turno</label>${campoMonto('name="sueldo_cena"', aNum(c.sueldo_cena))}</div></div>
       <div class="ayuda">Lo de cada uno se cambia en Sueldos, tocando el lápiz al lado del nombre.</div></div>
     <div class="card"><h3>${ico('db')} Copia de seguridad</h3><div id="cfCopia"></div></div>
+    <div class="card"><h3>${ico('nube')} Copia automática en Google Drive</h3><div id="cfDrive"></div></div>
     <div class="card"><h3>${ico('paleta')} Apariencia</h3><div id="cfAp"></div></div>
     <div class="card"><h3>📲 La app en este celular</h3><div id="cfApp"></div></div>
     <div class="muted chico" style="text-align:center;margin-top:16px">Pagos Farmacia · ${esc(marcaTexto())}</div>`;
   tarjetaCopia($('#cfCopia')); tarjetaApp($('#cfApp')); Apariencia.tarjeta($('#cfAp'));
+  if (window.Drive) Drive.tarjeta($('#cfDrive'));
+  $('#cfOrd').onclick = e => { e.preventDefault(); ordenarGastos(); };
   $('#cfOk').onclick = async () => { try { const d = leer(main);
-    delete d.undefined; await api('/api/config', d); ME = await api('/api/me'); toast('Guardado'); $('#gymNom').textContent = CFG().nombre_negocio; } catch (e) { fallo(e); } };
+    delete d.undefined; delete d.drive_client_id; await api('/api/config', d); ME = await api('/api/me'); toast('Guardado'); pintarMarca(); } catch (e) { fallo(e); } };
 };

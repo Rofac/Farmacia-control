@@ -1,11 +1,12 @@
 /* Guarda la app en el celular para que abra sin internet, y recibe los comprobantes que se comparten desde el banco o Mercado Pago.
    Al cambiar VERSION, el celular baja la versión nueva la próxima vez que abre la app con internet. */
-const VERSION = 'pag-1.5.0';
-const ARCHIVOS = ['./', 'index.html', 'manifest.webmanifest', 'static/estilo.css', 'static/apariencia.css', 'fonts/Poppins-Regular.woff', 'fonts/Poppins-Medium.woff', 'fonts/Poppins-Bold.woff', 'fonts/Lora-Variable.woff', 'static/app.js', 'static/pagos.js', 'static/pantallas.js', 'static/turnos.js', 'static/cheques.js', 'js/ocr-worker.js', 'lib/ocr/tesseract-core-lstm.wasm.js', 'lib/ocr/spa.traineddata',
+const VERSION = 'pag-1.6.0';
+const ARCHIVOS = ['./', 'index.html', 'manifest.webmanifest', 'static/estilo.css', 'static/apariencia.css', 'fonts/Poppins-Regular.woff', 'fonts/Poppins-Medium.woff', 'fonts/Poppins-Bold.woff', 'fonts/Lora-Variable.woff', 'static/app.js', 'static/pagos.js', 'static/pantallas.js', 'static/turnos.js', 'static/cheques.js', 'static/agenda.js', 'js/drive.js', 'img/roma_logo.png', 'img/roma_ico.png', 'js/ocr-worker.js', 'lib/ocr/tesseract-core-lstm.wasm.js', 'lib/ocr/spa.traineddata',
   'js/zip.js', 'js/servidor.js', 'js/movil.js', 'lib/sql-wasm.js', 'lib/sql-wasm.wasm', 'lib/pdf.js', 'lib/pdf.worker.js',
   'img/favicon.png', 'img/icono-180.png', 'img/icono-192.png', 'img/icono-512.png', 'img/icono-maskable.png'];
 
-self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(ARCHIVOS)).then(() => self.skipWaiting())); });
+self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(ARCHIVOS.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting())); });
+/* cache: 'reload' = baja los archivos nuevos de verdad (sin usar copias viejas del navegador) */
 /* sólo se borran las versiones viejas DE ESTA APP (las otras apps de rofac.github.io comparten el mismo lugar) */
 const PREFIJO = VERSION.split('-')[0] + '-';
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith(PREFIJO) && k !== VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim())); });

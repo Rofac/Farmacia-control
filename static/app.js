@@ -144,6 +144,8 @@ function bajarCSV(nombre, titulos, filas) {
 }
 
 const ICONS = {
+  fijo: '<path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
+  nube: '<path d="M17.5 19a4.5 4.5 0 0 0 .5-9h-1.3A7 7 0 1 0 4 15.3"/><path d="M12 12v9"/><path d="M8.5 15.5 12 12l3.5 3.5"/>',
   paleta: '<path d="M12 22a10 10 0 1 1 10-10c0 2.8-2.2 4-4 4h-2.2a1.8 1.8 0 0 0-1.3 3.1A1.8 1.8 0 0 1 12 22z"/><circle cx="7.5" cy="11" r="1.2"/><circle cx="10.5" cy="7" r="1.2"/><circle cx="15.5" cy="7.5" r="1.2"/>',
   mate: '<path d="M7 9h10l-1 9a3 3 0 0 1-3 3h-2a3 3 0 0 1-3-3z"/><path d="M6.5 9a5.5 5.5 0 0 1 11 0"/><path d="M14 9l4-7"/>',
   pedido: '<path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/>',
@@ -232,10 +234,12 @@ const CFG = () => ME.cfg;
 /* ================================================================ menú */
 const MENU = [
   { id: 'principal', t: 'Inicio', i: 'home' },
+  { id: 'agenda', t: 'Qué hay que pagar', i: 'cal' },
   { id: 'pagos', t: 'Pagos y comprobantes', i: 'recibo' },
   { id: 'proveedores', t: 'Proveedores', i: 'edificio' },
   { id: 'cheques', t: 'Cheques', i: 'cheque' },
   { id: 'gastos', t: 'Gastos', i: 'peso' },
+  { id: 'fijos', t: 'Gastos fijos', i: 'fijo' },
   { id: 'sueldos', t: 'Sueldos', i: 'users' },
   { id: 'turnos', t: 'Turnos de farmacia', i: 'guardia' },
   { id: 'vacaciones', t: 'Vacaciones', i: 'playa' },
@@ -336,7 +340,7 @@ async function iniciar() {
   try { ME = await api('/api/me'); } catch (e) { return; }
   MEDIOS = ME.medios || MEDIOS;
   const nom = CFG().nombre_negocio || 'Mi farmacia';
-  $('#gymNom').textContent = nom; $('#logo').innerHTML = ico('recibo'); $('#topTit').textContent = nom + ' · Pagos'; document.title = 'Pagos · ' + nom;
+  pintarMarca();
   $('#btnAyuda').innerHTML = ico('ayuda') + '<span class="lbl"> Ayuda</span>';
   $('#btnMenuMov').innerHTML = ico('menu');
   $('#btnMini').innerHTML = ico('pin', 'style="width:15px;height:15px"');
