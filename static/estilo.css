@@ -744,3 +744,9 @@ tr.demorado td { background:rgba(226,59,74,.06); }
 .ch-i { display:flex; flex-direction:column; gap:6px; align-items:flex-end; text-align:right; white-space:nowrap; }
 .ch-i b { font-size:16px; }
 @media (max-width:600px) { .ch-f { grid-template-columns:minmax(0,1fr) auto; } .ch-fe { grid-column:1 / -1; flex-direction:row; align-items:center; gap:8px; } }
+
+/* lectura del comprobante (OCR) */
+.lee-comp { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; margin: 4px 0 8px; border-radius: 10px; background: #e8f1fb; font-size: 14px; }
+.lee-comp.ok { background: #e7f6ec; color: #166534; } .lee-comp.no { background: #fff4e5; color: #92400e; }
+.lee-comp svg { width: 18px; height: 18px; flex: none; }
+input.leido { background: #f0fbf3 !important; box-shadow: 0 0 0 2px #86efac inset; }

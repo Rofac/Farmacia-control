@@ -29,7 +29,7 @@ async function subirAdjuntos(destino, archivos) {
 }
 
 /* zona para adjuntar: elegir archivo, sacar foto (celular), arrastrar o pegar (Ctrl+V) */
-function zonaAdjuntos(el, existentes = [], alBorrar, iniciales = []) {
+function zonaAdjuntos(el, existentes = [], alBorrar, iniciales = [], alAgregar) {
   const pend = [...iniciales];
   el.innerHTML = `<div class="adj-zona" tabindex="0"><div class="adj-l"></div>
     <label class="btn chico pri" style="margin:0">${ico('clip')} Adjuntar foto o PDF<input type="file" accept="image/*,application/pdf,.pdf" multiple hidden></label>
@@ -41,7 +41,7 @@ function zonaAdjuntos(el, existentes = [], alBorrar, iniciales = []) {
       + pend.map((f, i) => `<div class="adj-i nuevo">${f.type === 'application/pdf' || /\.pdf$/i.test(f.name) ? '<span class="adj-img pdf">PDF</span>' : `<img class="adj-img" src="${URL.createObjectURL(f)}">`}
         <span class="chico">${esc(f.name || 'captura')}</span><button type="button" class="ab" data-bp="${i}" style="color:var(--rojo)">${ico('x')}</button></div>`).join('');
   };
-  const agregar = fs => { [...fs].forEach(f => { if (f && f.size) pend.push(f); }); pintar(); };
+  const agregar = fs => { const nuevos = [...fs].filter(f => f && f.size); pend.push(...nuevos); pintar(); if (nuevos.length && alAgregar) alAgregar(nuevos); };
   $('input', el).onchange = e => { agregar(e.target.files); e.target.value = ''; };
   z.ondragover = e => { e.preventDefault(); z.classList.add('sobre'); };
   z.ondragleave = () => z.classList.remove('sobre');
@@ -94,10 +94,29 @@ async function cargarPago(pre = {}, luego) {
       <div class="t-SUELDO full"><label class="chk"><input type="checkbox" id="cpAd" ${p.adelanto ? 'checked' : ''}> Es un <b>adelanto</b> (se descuenta de lo que cobra el viernes)</label></div>
       <div class="full"><label>Detalle (opcional)</label><input id="cpD" value="${esc(p.concepto || '')}" placeholder="Ej. Resumen del 03/11 · alquiler de noviembre"></div></div>
     <div id="cpInfo"></div>
-    <label style="margin-top:12px">Comprobante</label><div id="cpA"></div>
+    <label style="margin-top:12px">Comprobante</label><div id="cpLee"></div><div id="cpA"></div>
     ${!pre.id ? '<label class="chk t-PROVEEDOR" style="margin-top:10px"><input type="checkbox" id="cpAc"> Ya figura acreditado en la cuenta del proveedor</label>' : ''}`,
     `<button class="btn" data-cerrar>Cancelar</button><button class="btn verde grande" id="cpOk">${ico('check')} Guardar pago</button>`, 'xl', 'recibo');
-  const zona = zonaAdjuntos($('#cpA', m), p.adjuntos, pre.id ? () => {} : null, pre.archivos || []);
+  /* al adjuntar (o al compartir desde el banco) lee el comprobante y completa lo que esté vacío */
+  const tocados = new Set();
+  ['cpI', 'cpO', 'cpF', 'cpP'].forEach(id => $('#' + id, m).addEventListener('input', () => tocados.add(id)));
+  const leerAdjuntos = async files => {
+    if (!window.LectorComprobantes) return;
+    const el = $('#cpLee', m);
+    el.innerHTML = `<div class="lee-comp">${ico('lupa')} Leyendo el comprobante… <span class="muted chico">(unos segundos)</span></div>`;
+    let d = {};
+    try { d = await LectorComprobantes.leer(files, L); } catch (e) { d = {}; }
+    if (!m.isConnected) return;
+    const puso = [];
+    if (d.importe && !tocados.has('cpI') && !(aNum($('#cpI', m).value) > 0)) { $('#cpI', m).value = fmtIn(d.importe); $('#cpI', m).classList.add('leido'); puso.push('importe <b>' + money(d.importe) + '</b>'); }
+    if (d.operacion && !tocados.has('cpO') && !$('#cpO', m).value) { $('#cpO', m).value = d.operacion; puso.push('operación ' + esc(d.operacion)); }
+    if (d.fecha && !tocados.has('cpF') && !pre.id) { $('#cpF', m).value = d.fecha; puso.push('fecha ' + dmy(d.fecha)); }
+    if (d.proveedor_id && !$('#cpP', m).value && tipo === 'PROVEEDOR') { $('#cpP', m).value = d.proveedor_id; info(); puso.push('proveedor'); }
+    el.innerHTML = puso.length ? `<div class="lee-comp ok">${ico('check')} Leí del comprobante: ${puso.join(' · ')}. <b>Revisalo</b> antes de guardar.</div>`
+      : d.importe ? '' : `<div class="lee-comp no">No pude leer el importe del comprobante: escribilo a mano.</div>`;
+  };
+  const zona = zonaAdjuntos($('#cpA', m), p.adjuntos, pre.id ? () => {} : null, pre.archivos || [], leerAdjuntos);
+
   const cerrar0 = m.cerrar; m.cerrar = () => { zona.soltar(); cerrar0(); };
   const pintarTipo = () => { $$('.t-PROVEEDOR,.t-GASTO,.t-SUELDO', m).forEach(x => x.style.display = x.classList.contains('t-' + tipo) ? '' : 'none'); info(); };
   const info = () => {
@@ -123,6 +142,7 @@ async function cargarPago(pre = {}, luego) {
   $('#cpKN', m).onclick = () => nuevaCuenta(async id => { const l = await api('/api/cuentas'); $('#cpK', m).innerHTML = '<option value="">Elegí…</option>' + l.filter(x => x.activo).map(x => `<option value="${x.id}">${esc(x.nombre)}${x.tipo === 'TERCERO' ? ' (paga por mí)' : ''}</option>`).join(''); $('#cpK', m).value = id; });
   $('#cpEN', m).onclick = () => editarEmpleado({}, async id => { const l = await api('/api/empleados'); L.emp = l; $('#cpE', m).innerHTML = '<option value="">Elegí…</option>' + l.filter(x => x.activo).map(x => `<option value="${x.id}">${esc(x.nombre)}</option>`).join(''); $('#cpE', m).value = id; info(); });
   pintarTipo();
+  if (pre.archivos && pre.archivos.length && !pre.id) leerAdjuntos(pre.archivos);
   setTimeout(() => (tipo === 'PROVEEDOR' && !$('#cpP', m).value ? $('#cpP', m) : $('#cpI', m)).focus(), 60);
   $('#cpOk', m).onclick = async () => {
     const d = { id: pre.id, tipo, proveedor_id: $('#cpP', m).value, categoria: $('#cpC', m).value, empleado_id: $('#cpE', m).value, fecha: $('#cpF', m).value, importe: $('#cpI', m).value,

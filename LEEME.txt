@@ -73,3 +73,14 @@ APARIENCIA (18/11/2026, como en la Agenda Docente y la app de empleados)
   carpeta fonts/ (4 archivos). El celular toma la versión nueva (pag-1.4.0) la próxima vez que abre la app con internet
   (a veces hay que cerrarla y abrirla 2 veces).
 
+LEER EL IMPORTE SOLO (19/11/2026, versión pag-1.5.0)
+- Al adjuntar un comprobante en "Cargar pago" (Adjuntar foto o PDF, sacar foto, o Compartir desde el banco / Mercado Pago)
+  el celular lo lee solo y completa el IMPORTE, el N° de operación y la fecha (y el proveedor si lo reconoce).
+  Lee PDF con texto, PDF que son una imagen, capturas de pantalla (también en modo oscuro) y fotos de la pantalla.
+- No es 100 % preciso: lo que leyó queda marcado en verde y dice "Revisalo antes de guardar". Si ya escribiste el
+  importe, no lo cambia. Si no lo pudo leer, avisa y se escribe a mano.
+- Anda sin internet: el lector (Tesseract, gratis) queda adentro de la app (carpeta lib/ocr, unos 6 MB).
+- ACTUALIZAR: subí todo al repositorio como siempre (archivos nuevos: js/ocr-worker.js y la carpeta lib/ocr).
+  La primera vez que se actualiza baja esos 6 MB (mejor con WiFi).
+- Si algún comprobante de tu banco no lo lee bien, mandame una captura (podés tapar los datos) y lo ajusto.
+

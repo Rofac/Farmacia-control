@@ -95,11 +95,86 @@ async function textoPdf(file) {
   for (let i = 1; i <= Math.min(doc.numPages, 3); i++) { const c = await (await doc.getPage(i)).getTextContent(); t += c.items.map(x => x.str + (x.hasEOL ? '\n' : ' ')).join('') + '\n'; }
   return t;
 }
+/* ---------- LEER COMPROBANTES: texto del PDF y, si es una foto (o un PDF que es una foto), OCR.
+   No es 100 % preciso: lo que se lee queda en el formulario para revisarlo. */
+const OCR = (() => {
+  let w = null, n = 0; const esperan = {};
+  const worker = () => {
+    if (w) return w;
+    w = new Worker('js/ocr-worker.js');
+    w.onmessage = e => { const f = esperan[e.data.id]; if (f) { delete esperan[e.data.id]; e.data.error ? f.mal(new Error(e.data.error)) : f.ok(e.data.texto); } };
+    w.onerror = () => { Object.values(esperan).forEach(f => f.mal(new Error('El lector de imágenes falló'))); for (const k in esperan) delete esperan[k]; w = null; };
+    return w;
+  };
+  /* imagen → gris, con contraste y de un tamaño cómodo para leer */
+  async function preparar(src) {
+    const W = src.width, H = src.height, esc = Math.min(2.2, Math.max(1, 1600 / W), 4000 / H);
+    const c = document.createElement('canvas'); c.width = Math.round(W * esc); c.height = Math.round(H * esc);
+    const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(src, 0, 0, c.width, c.height);
+    const d = x.getImageData(0, 0, c.width, c.height), a = d.data;
+    let suma = 0; for (let i = 0; i < a.length; i += 4) { const g = 0.299 * a[i] + 0.587 * a[i + 1] + 0.114 * a[i + 2]; a[i] = g; suma += g; }
+    const oscuro = suma / (a.length / 4) < 110;           // fondo oscuro (modo noche del banco): se invierte
+    for (let i = 0; i < a.length; i += 4) { let g = a[i]; if (oscuro) g = 255 - g; g = Math.max(0, Math.min(255, (g - 128) * 1.35 + 128)); a[i] = a[i + 1] = a[i + 2] = g; }
+    x.putImageData(d, 0, 0);
+    return new Promise(ok => c.toBlob(ok, 'image/png'));
+  }
+  async function leer(src, seg = 90) {
+    const png = await preparar(src), buf = await png.arrayBuffer(), id = ++n;
+    return new Promise((ok, mal) => {
+      const t = setTimeout(() => { delete esperan[id]; mal(new Error('tardó demasiado')); }, seg * 1000);
+      esperan[id] = { ok: v => { clearTimeout(t); ok(v); }, mal: e => { clearTimeout(t); mal(e); } };
+      worker().postMessage({ id, buf }, [buf]);
+    });
+  }
+  async function imagen(file) {
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => createImageBitmap(file));
+    try { return await leer(bmp); } finally { if (bmp.close) bmp.close(); }
+  }
+  async function paginaPdf(doc, i) {
+    const pg = await doc.getPage(i), vp = pg.getViewport({ scale: Math.min(3, 1700 / pg.getViewport({ scale: 1 }).width) });
+    const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
+    const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+    await pg.render({ canvasContext: x, viewport: vp }).promise;
+    return leer(c);
+  }
+  return { imagen, paginaPdf };
+})();
+const esPdfComp = f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '');
+const esImagenComp = f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic)$/i.test(f.name || '');
+/* texto de un comprobante: el del PDF; si no trae importe (PDF que es una foto) o es una imagen, con OCR */
+async function textoComprobante(file, L) {
+  if (esPdfComp(file)) {
+    const doc = await (await cargarPdfJs()).getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+    let t = '';
+    for (let i = 1; i <= Math.min(doc.numPages, 3); i++) { const c = await (await doc.getPage(i)).getTextContent(); t += c.items.map(x => x.str + (x.hasEOL ? '\n' : ' ')).join('') + '\n'; }
+    if (leerDatos(t, L).importe) return t;
+    return t + '\n' + await OCR.paginaPdf(doc, 1);
+  }
+  if (esImagenComp(file)) return OCR.imagen(file);
+  return '';
+}
+/* lee todos los archivos y junta lo que encontró (el primero que trae importe manda) */
+async function leerComprobantes(files, L) {
+  let res = {};
+  for (const f of files) {
+    try {
+      const d = leerDatos(await textoComprobante(f, L), L);
+      if (d.importe) return Object.assign({}, res, d);
+      res = Object.assign(d, res);
+    } catch (e) { console.warn('No se pudo leer el comprobante', e); }
+  }
+  return res;
+}
+window.LectorComprobantes = { leer: leerComprobantes, leerDatos: (t, L) => leerDatos(t, L) };
+
 /* lee del comprobante lo que se pueda: importe, N° de operación y a quién se le pagó */
 function leerDatos(texto, L) {
-  const out = {}, t = String(texto || '').replace(/ /g, ' ');
+  const out = {}, t = String(texto || '').replace(/ /g, ' ')
+    .replace(/(^|[\s:])[S§]\s?(?=\d{1,3}(?:[.,]\d{3})+)/g, '$1$$ ')          // OCR: "S 12.500" es "$ 12.500"
+    .replace(/(\d)\s+([.,])\s*(\d)/g, '$1$2$3');                             // "12 .500" es "12.500"
   const MONTO = '(\\d{1,3}(?:\\.\\d{3})+(?:,\\d{1,2})?|\\d+(?:,\\d{1,2})?)';
-  const conClave = t.match(new RegExp('(?:importe|monto|total|transferiste|pagaste|enviaste|valor)[^\\d$\\n]{0,40}\\$?\\s*' + MONTO, 'i'));
+  const conClave = t.match(new RegExp('(?:importe|monto|total|transferiste|pagaste|enviaste|valor|debitado|transferido)[^\\d$\\n]{0,40}\\$?\\s*' + MONTO, 'i'))
+    || t.match(new RegExp('(?:importe|monto|total|transferiste|pagaste|enviaste|transferido)[^\\d$]{0,40}\\n\\s*\\$?\\s*' + MONTO, 'i'));
   const todos = [...t.matchAll(new RegExp('\\$\\s*' + MONTO, 'g'))].map(m => aNum(m[1])).filter(x => x > 0);
   const imp = conClave ? aNum(conClave[1]) : todos.length ? Math.max(...todos) : 0;
   if (imp > 0) out.importe = imp;
@@ -125,11 +200,9 @@ async function recibirCompartido() {
   if (!archivos.length) return toast('No llegó ningún archivo. Compartí el comprobante como imagen o PDF.', 'err');
   const L = await listas(true);
   let texto = [c.title, c.text].filter(Boolean).join('\n');
-  for (const f of archivos) if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) { try { texto += '\n' + await textoPdf(f); } catch (e) { /* se carga a mano */ } }
-  const d = leerDatos(texto, L);
+  const d = leerDatos(texto, L);         // lo que vino escrito al compartir; el formulario lee el archivo solo
   history.replaceState(null, '', location.pathname + '#principal');
   cargarPago(Object.assign({ archivos }, d), () => recargar());
-  toast(d.importe ? 'Revisá los datos que se leyeron del comprobante y elegí ' + (d.proveedor_id ? 'desde dónde pagaste' : 'a quién le pagaste') : 'Comprobante adjuntado: completá el importe y a quién le pagaste');
 }
 
 /* ---------- copias de seguridad */

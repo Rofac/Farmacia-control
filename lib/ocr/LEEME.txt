@@ -1,0 +1,1 @@
+Tesseract OCR (Apache 2.0): tesseract.js-core (github.com/naptha/tesseract.js-core) y datos del idioma español tessdata_fast (github.com/tesseract-ocr/tessdata_fast).
