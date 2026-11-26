@@ -110,3 +110,16 @@ QUÉ HAY QUE PAGAR, GASTOS FIJOS, LOGO Y COPIA EN GOOGLE DRIVE (20/11/2026, vers
    - La app sólo ve esa carpeta, no el resto de tu Drive.
 - ACTUALIZAR: subí todo al repositorio Rofac/Farmacia-control como siempre. Archivos nuevos: static/agenda.js, js/drive.js,
   img/roma_logo.png e img/roma_ico.png. Los datos del celular no se tocan. Abrí la app 2 veces con internet.
+
+SALDOS SEPARADOS DE UN PROVEEDOR (25/11/2026, versión pag-1.7.0)
+Para cuando con un proveedor tenés más de una cuenta (ej. Cofaral: Roma 1 y Roma 2).
+1. Proveedores > Cofaral > Datos > "Saldos separados" > Agregar saldo: Roma 1 y Roma 2.
+   Opcional: el N° de cliente o la referencia de cada uno, para que lo reconozca solo en el comprobante.
+   Lo que ya tenías cargado lo podés mandar todo a uno de los dos.
+2. Al cargar un resumen o un pago de Cofaral aparecen dos botones grandes: elegís de qué saldo es (con lo que debés en cada uno).
+   Sin elegir no deja guardar.
+3. Cada saldo se descuenta por separado: un pago de Roma 2 sólo paga resúmenes de Roma 2.
+4. En la cuenta del proveedor, en el Inicio y en "Qué hay que pagar" se ve cada saldo aparte (con Pagar directo).
+Lectura del comprobante: reconoce al proveedor por el NOMBRE, el CUIT o el CBU/ALIAS que tenga cargado.
+Si además tiene el N° de cliente de un saldo, elige ese saldo; si no, lo elegís con el botón.
+OJO: traer datos desde la PC (que no tiene saldos separados) los vuelve a juntar.

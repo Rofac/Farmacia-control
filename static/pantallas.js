@@ -28,7 +28,9 @@ P.principal = async (main) => {
         ${p.vencido > 0.009 ? '<span class="pill rojo">Vencido</span>' : p.vence_semana > 0.009 ? '<span class="pill naranja">Vence en 7 días</span>' : p.saldo > 0.009 ? '' : '<span class="pill ATENDIDO">Al día</span>'}</div>
       <div class="prov-n"><small>Le debés</small><b class="${p.saldo > 0.009 ? 'neg' : ''}">${money(Math.max(0, p.saldo))}</b></div>
       ${p.saldo < -0.009 ? `<div class="pos chico">Tenés ${money(-p.saldo)} a favor</div>` : ''}
-      ${p.pendientes.map(x => `<div class="pend-r"><span>Resumen ${dm(x.fecha)} · ${vtoTxt(x.vencimiento)}</span><b>${money0(x.falta)}</b></div>`).join('')}
+      ${(p.saldos || []).length ? `<div class="sub-ini">${p.saldos.filter(s => s.nombre || Math.abs(s.saldo) > 0.009).map(s => `<div class="pend-r"><span><b>${esc(s.nombre || 'Sin separar')}</b>${s.vencido > 0.009 ? ' · <span class="neg">vencido</span>' : s.vence_semana > 0.009 ? ' · 7 días ' + money0(s.vence_semana) : ''}</span>
+        <span class="inl" style="gap:6px;flex-wrap:nowrap"><b class="${s.saldo > 0.009 ? 'neg' : ''}">${money0(Math.max(0, s.saldo))}</b>${s.nombre ? `<button class="ab verde" data-pp="${p.id}" data-sub="${esc(s.nombre)}" title="Pagar ${esc(s.nombre)}">${ico('peso')}</button>` : ''}</span></div>`).join('')}</div>`
+        : p.pendientes.map(x => `<div class="pend-r"><span>Resumen ${dm(x.fecha)} · ${vtoTxt(x.vencimiento)}</span><b>${money0(x.falta)}</b></div>`).join('')}
       ${p.sin_acreditar_n ? `<div class="muted chico" style="margin-top:6px">${ico('reloj')} ${p.sin_acreditar_n} pago${p.sin_acreditar_n === 1 ? '' : 's'} sin acreditar (${money0(p.sin_acreditar)})</div>` : ''}
       <div class="inl" style="margin-top:10px"><button class="btn chico verde" data-pp="${p.id}">${ico('peso')} Pagar</button><button class="btn chico" data-rr="${p.id}">${ico('file')} Resumen</button></div></div>`).join('')
       || `<div class="card vacio-g">${ico('edificio')}<p>Cargá los proveedores en Proveedores.</p></div>`}</div>
@@ -48,7 +50,7 @@ P.principal = async (main) => {
   main.onclick = async e => {
     const ev = e.target.closest('[data-ev]'); if (ev) return editarEvento(+ev.dataset.ev, re);
     const v = e.target.closest('[data-ver]'); if (v) return verArchivo(v.dataset.ver);
-    const pp = e.target.closest('[data-pp]'); if (pp) return cargarPago({ tipo: 'PROVEEDOR', proveedor_id: +pp.dataset.pp }, re);
+    const pp = e.target.closest('[data-pp]'); if (pp) return cargarPago({ tipo: 'PROVEEDOR', proveedor_id: +pp.dataset.pp, subcuenta: pp.dataset.sub || '' }, re);
     const rr = e.target.closest('[data-rr]'); if (rr) return cargarResumen({ proveedor_id: +rr.dataset.rr }, re);
     const a = e.target.closest('[data-ac]'); if (a) { await api(`/api/pagos/${a.dataset.ac}/acreditado`, { acreditado: 1 }); toast('Marcado como acreditado'); return re(); }
     const g = e.target.closest('[data-g]'); if (g) return verPago(+g.dataset.g, re);
@@ -69,7 +71,8 @@ P.proveedores = async (main) => {
   const l = await api('/api/proveedores');
   main.innerHTML = cabecera('edificio', 'Proveedores', 'Lo que te facturan, lo que les pagaste y el saldo de cada uno', `<button class="btn pri" id="prN">${ico('plus')} Agregar proveedor</button>`) +
     `<div class="card"><div class="tabla-x"><table class="t"><thead><tr><th>Proveedor</th><th class="r">Le debés</th><th class="r">Próximos 7 días</th><th class="r ocultar-movil">Sin acreditar</th><th class="ocultar-movil">Último pago</th><th></th></tr></thead><tbody>
-    ${l.map(p => `<tr data-p="${p.id}" class="${p.activo ? '' : 'anulado'}" style="cursor:pointer"><td><b>${esc(p.nombre)}</b>${p.principal ? ' <span class="pill os">Principal</span>' : ''}${p.contacto || p.telefono ? `<div class="muted chico">${esc([p.contacto, p.telefono].filter(Boolean).join(' · '))}</div>` : ''}</td>
+    ${l.map(p => `<tr data-p="${p.id}" class="${p.activo ? '' : 'anulado'}" style="cursor:pointer"><td><b>${esc(p.nombre)}</b>${p.principal ? ' <span class="pill os">Principal</span>' : ''}${p.contacto || p.telefono ? `<div class="muted chico">${esc([p.contacto, p.telefono].filter(Boolean).join(' · '))}</div>` : ''}
+      ${(p.saldos || []).length ? `<div class="chico">${p.saldos.filter(s => s.nombre || Math.abs(s.saldo) > 0.009).map(s => `${esc(s.nombre || 'Sin separar')}: <b class="${s.saldo > 0.009 ? 'neg' : ''}">${money0(s.saldo)}</b>`).join(' · ')}</div>` : ''}</td>
       <td class="r ${p.saldo > 0.009 ? 'neg' : p.saldo < -0.009 ? 'pos' : ''}"><b>${p.saldo < -0.009 ? 'a favor ' + money(-p.saldo) : money(p.saldo)}</b></td>
       <td class="r">${p.vence_semana > 0.009 ? `<b>${money(p.vence_semana)}</b>${p.vencido > 0.009 ? '<div class="neg chico">hay vencido</div>' : ''}` : '<span class="muted">—</span>'}</td>
       <td class="r ocultar-movil">${p.sin_acreditar_n ? `${money0(p.sin_acreditar)} <span class="muted chico">(${p.sin_acreditar_n})</span>` : ''}</td><td class="chico ocultar-movil">${p.ultimo_pago ? dmy(p.ultimo_pago) : ''}</td>
@@ -90,11 +93,36 @@ function editarProveedor(p, luego) {
     <div><label>Contacto (cobranzas)</label><input name="contacto" value="${esc(p.contacto || '')}"></div><div><label>Teléfono / WhatsApp</label><input name="telefono" value="${esc(p.telefono || '')}"></div>
     <div><label>Email</label><input name="email" value="${esc(p.email || '')}"></div><div><label>CBU / alias para transferir</label><input name="cbu" value="${esc(p.cbu || '')}"></div>
     <div class="full"><label>Notas</label><textarea name="notas">${esc(p.notas || '')}</textarea></div>
+    <div class="full sub-ed"><label>${ico('cuenta')} Saldos separados (opcional)</label>
+      <div class="ayuda" style="margin:0 0 6px">Si con este proveedor tenés más de una cuenta (ej. Cofaral: <b>Roma 1</b> y <b>Roma 2</b>), cargalas acá: cada una lleva su propio saldo y al pagar elegís cuál.</div>
+      <div id="epSubs"></div><button type="button" class="btn chico" id="epSubN">${ico('plus')} Agregar saldo</button><div id="epViejos"></div></div>
     <div class="full inl" style="gap:18px"><label class="chk"><input type="checkbox" name="principal" ${p.principal ? 'checked' : ''}> Proveedor principal (siempre en el Inicio)</label>
       ${p.id ? `<label class="chk"><input type="checkbox" name="activo" ${p.activo ? 'checked' : ''}> Activo</label>` : ''}</div></div>`,
     `<button class="btn" data-cerrar>Cancelar</button><button class="btn pri" id="epOk">${ico('check')} Guardar</button>`, 'ancho', 'edificio');
+  /* saldos separados */
+  let subs = (p.subs || []).map(x => ({ nombre: x.nombre, clave: x.clave || '', antes: x.nombre }));
+  const sinSeparar = (p.saldos || []).find(x => x.nombre === '');
+  const yaCargado = p.id && !(p.subs || []).length && (p.facturado > 0.009 || p.pagado > 0.009);
+  const pintarSubs = () => {
+    $('#epSubs', m).innerHTML = subs.map((x, i) => `<div class="sub-fila"><input data-sn="${i}" value="${esc(x.nombre)}" placeholder="Ej. Roma ${i + 1}">
+      <input data-sc="${i}" value="${esc(x.clave)}" placeholder="N° de cliente o referencia (opcional)"><button type="button" class="ab rosa" data-sx="${i}" title="Sacar">${ico('trash')}</button></div>`).join('');
+    const nuevos = subs.filter(x => x.nombre.trim());
+    $('#epViejos', m).innerHTML = (yaCargado || (sinSeparar && sinSeparar.facturado + sinSeparar.pagado > 0.009)) && nuevos.length >= 2
+      ? `<div style="margin-top:8px"><label>Lo que ya tenías cargado de ${esc(p.nombre)} (sin separar) va a:</label><select id="epAsig"><option value="">Dejarlo aparte ("sin separar")</option>${nuevos.map(x => `<option>${esc(x.nombre)}</option>`).join('')}</select></div>` : '';
+  };
+  if (!subs.length && !p.id) subs = [];
+  $('#epSubN', m).onclick = () => { if (!subs.length) subs.push({ nombre: '', clave: '' }); subs.push({ nombre: '', clave: '' }); pintarSubs(); const i = $$('[data-sn]', m).find(x => !x.value); i && i.focus(); };
+  $('#epSubs', m).oninput = e => { const n = e.target.dataset.sn, c = e.target.dataset.sc; if (n !== undefined) subs[+n].nombre = e.target.value; if (c !== undefined) subs[+c].clave = e.target.value;
+    if (n !== undefined) { const v = $('#epAsig', m) && $('#epAsig', m).value; pintarSubs(); const el = $(`[data-sn="${n}"]`, m); el.focus(); el.setSelectionRange(el.value.length, el.value.length); if (v && $('#epAsig', m)) $('#epAsig', m).value = v; } };
+  $('#epSubs', m).onclick = e => { const b = e.target.closest('[data-sx]'); if (!b) return; subs.splice(+b.dataset.sx, 1); pintarSubs(); };
+  pintarSubs();
   $('#epOk', m).onclick = async () => { const d = leer($('.mb', m)); d.id = p.id; if (!p.id) d.activo = 1;
-    try { const r = await api('/api/proveedores', d); m.cerrar(); olvidarListas(); toast('Proveedor guardado'); luego && luego(r.id); } catch (e) { fallo(e); } };
+    d.subcuentas = subs.filter(x => x.nombre.trim()).map(x => ({ nombre: x.nombre.trim(), clave: x.clave.trim(), antes: x.antes || '' }));
+    if ($('#epAsig', m) && $('#epAsig', m).value) d.asignar_viejos = $('#epAsig', m).value;
+    try {
+      let r = await api('/api/proveedores', d);
+      if (r.confirmar) { if (!await confirmar(r.confirmar, 'Juntar')) return; r = await api('/api/proveedores', Object.assign(d, { juntar: 1 })); }
+      m.cerrar(); olvidarListas(); toast('Proveedor guardado'); luego && luego(r.id); } catch (e) { fallo(e); } };
 }
 
 /* resumen semanal / factura que llega */
@@ -104,6 +132,7 @@ async function cargarResumen(pre = {}, luego) {
   const prov = id => L.prov.find(x => x.id === +id);
   const m = modal(r.id ? 'Modificar resumen' : 'Cargar resumen o factura', `<div class="g">
     <div class="full"><label>Proveedor</label><select id="crP"><option value="">Elegí…</option>${L.prov.filter(x => x.activo).map(x => `<option value="${x.id}" ${x.id === +r.proveedor_id ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select></div>
+    <div class="full" id="crS"></div>
     <div><label>Fecha de cierre del resumen</label><input type="date" id="crF" value="${esc(r.fecha || hoy())}"></div>
     <div><label>Fecha de pago (vencimiento)</label><input type="date" id="crV" value="${esc(r.vencimiento || '')}"><div class="ayuda" id="crVa"></div></div>
     <div><label>Importe a pagar</label>${campoMonto('id="crI" style="font-size:18px;font-weight:800"', r.importe)}</div>
@@ -116,19 +145,29 @@ async function cargarResumen(pre = {}, luego) {
   const c0 = m.cerrar; m.cerrar = () => { zona && zona.soltar(); c0(); };
   const sugerir = () => { const p = prov($('#crP', m).value); const f = $('#crF', m).value; if (!p || !f) return;
     const v = sumarDias(f, p.dias_pago || 7); if (!r.id || !$('#crV', m).value) $('#crV', m).value = v; $('#crVa', m).textContent = `${p.dias_pago || 7} días después del cierre`; };
-  $('#crP', m).onchange = sugerir; $('#crF', m).onchange = sugerir; if (!r.id) sugerir();
+  const saldo = elegirSaldo($('#crS', m), prov(r.proveedor_id), r.subcuenta || '');
+  $('#crP', m).onchange = () => { saldo.cambiarProv(prov($('#crP', m).value)); sugerir(); }; $('#crF', m).onchange = sugerir; if (!r.id) sugerir();
   setTimeout(() => ($('#crP', m).value ? $('#crI', m) : $('#crP', m)).focus(), 60);
   $('#crOk', m).onclick = async () => {
-    try { const x = await apiConfirmando('/api/resumenes', { id: r.id, proveedor_id: $('#crP', m).value, fecha: $('#crF', m).value, vencimiento: $('#crV', m).value, importe: $('#crI', m).value, numero: $('#crN', m).value, notas: $('#crO', m).value });
+    if (saldo.hay() && !saldo.valor()) return toast('Elegí de qué saldo es el resumen', 'err');
+    try { const x = await apiConfirmando('/api/resumenes', { id: r.id, proveedor_id: $('#crP', m).value, subcuenta: saldo.valor(), fecha: $('#crF', m).value, vencimiento: $('#crV', m).value, importe: $('#crI', m).value, numero: $('#crN', m).value, notas: $('#crO', m).value });
       if (!x) return; if (zona) { try { await subirAdjuntos({ resumen_id: x.id }, zona.pendientes()); } catch (e) { fallo(e); } }
       m.cerrar(); olvidarListas(); toast('Resumen guardado'); luego && luego(); } catch (e) { fallo(e); }
   };
   if ($('#crB', m)) $('#crB', m).onclick = async () => { if (!await confirmar('¿Borrar este resumen?', 'Borrar')) return; await api('/api/resumenes/' + r.id, undefined, 'DELETE'); m.cerrar(); olvidarListas(); toast('Resumen borrado'); luego && luego(); };
 }
 
+let FILTRO_SALDO = {};
 P.proveedor = async (main, id) => {
   const p = await api('/api/proveedores/' + id);
   const re = () => ir('proveedor', id);
+  const subs = (p.saldos || []).length ? p.saldos : [];
+  const fs = subs.some(x => x.nombre === FILTRO_SALDO[id]) ? FILTRO_SALDO[id] : null;      // null = todos
+  const ver = x => fs === null || (x.subcuenta || '') === fs;
+  const nomSub = n => n || 'Sin separar';
+  if (fs !== null) {      // con un saldo elegido, el saldo corrido de la cuenta corriente es el de ese saldo
+    let s = 0; for (const mv of p.movimientos.slice().reverse()) if (ver(mv.x)) { s = Math.round((s + mv.debe - mv.haber) * 100) / 100; mv.saldo = s; }
+  }
   main.innerHTML = cabecera('edificio', p.nombre, [p.contacto, p.telefono, p.cbu && 'CBU/alias ' + p.cbu].filter(Boolean).join(' · ') || 'Proveedor',
     `<button class="btn" id="pvV">${ico('izq')} Proveedores</button><button class="btn" id="pvE">${ico('lapiz')} Datos</button><button class="btn" id="pvR">${ico('file')} Cargar resumen</button>
      <button class="btn verde grande" id="pvP">${ico('peso')} Cargar pago</button>`) +
@@ -136,23 +175,33 @@ P.proveedor = async (main, id) => {
       <div class="kpi" style="--c:var(--violeta)"><small>Pagado sin acreditar</small><b>${money(p.sin_acreditar)}</b><div class="det">${p.sin_acreditar_n} pago${p.sin_acreditar_n === 1 ? '' : 's'}</div></div>
       <div class="kpi" style="--c:var(--naranja)"><small>Lo que te debería figurar en ${esc(p.nombre)}</small><b>${money(p.saldo_proveedor)}</b><div class="det">hasta que acrediten lo pendiente</div></div>
       <div class="kpi" style="--c:var(--turquesa)"><small>Total facturado / pagado</small><b style="font-size:17px">${money0(p.facturado)} / ${money0(p.pagado)}</b></div></div>
-    <div class="prov-ed"><div class="card"><h3>${ico('file')} Resúmenes y facturas</h3>
+    ${subs.length ? `<div class="card"><div class="inl" style="justify-content:space-between"><h3 style="margin:0">${ico('cuenta')} Saldos separados</h3>
+      <div class="seg chico" id="pvF"><button class="${fs === null ? 'act' : ''}" data-fs="*">Todos</button>${subs.map(x => `<button class="${fs === x.nombre ? 'act' : ''}" data-fs="${esc(x.nombre)}">${esc(nomSub(x.nombre))}</button>`).join('')}</div></div>
+      <div class="saldos-g">${subs.map(x => `<div class="saldo-c ${fs === x.nombre ? 'act' : ''}"><b>${esc(nomSub(x.nombre))}</b>
+        <div class="prov-n"><small>Le debés</small><b class="${x.saldo > 0.009 ? 'neg' : ''}">${x.saldo < -0.009 ? 'a favor ' + money(-x.saldo) : money(x.saldo)}</b></div>
+        <div class="muted chico">${x.vencido > 0.009 ? `<b class="neg">vencido ${money0(x.vencido)}</b> · ` : ''}${x.vence_semana > 0.009 ? `próximos 7 días ${money0(x.vence_semana)}` : x.proximo ? 'próximo ' + dm(x.proximo) : 'nada pendiente'}${x.sin_acreditar_n ? ` · ${x.sin_acreditar_n} sin acreditar` : ''}</div>
+        ${x.nombre ? `<div class="inl" style="margin-top:8px"><button class="btn chico verde" data-ps="${esc(x.nombre)}">${ico('peso')} Pagar</button><button class="btn chico" data-rs="${esc(x.nombre)}">${ico('file')} Resumen</button></div>`
+          : `<div class="ayuda">Cargado antes de separar. Tocá cada resumen o pago para pasarlo a su saldo, o en Datos elegí a cuál va todo junto.</div>`}</div>`).join('')}</div></div>` : ''}
+    <div class="prov-ed"><div class="card"><h3>${ico('file')} Resúmenes y facturas${fs !== null ? ' · ' + esc(nomSub(fs)) : ''}</h3>
       <div class="tabla-x"><table class="t comp"><thead><tr><th>Cierre</th><th>Pago</th><th class="r">Importe</th><th class="r">Falta</th><th></th></tr></thead><tbody>
-      ${p.resumenes.slice().reverse().map(x => `<tr data-r="${x.id}" style="cursor:pointer" class="${x.vencido ? 'demorado' : ''}"><td class="chico">${dmy(x.fecha)}${x.numero ? `<div class="muted">N° ${esc(x.numero)}</div>` : ''}${x.notas ? `<div class="muted">${esc(x.notas)}</div>` : ''}</td>
+      ${p.resumenes.slice().reverse().filter(ver).map(x => `<tr data-r="${x.id}" style="cursor:pointer" class="${x.vencido ? 'demorado' : ''}"><td class="chico">${dmy(x.fecha)}${subs.length && fs === null ? `<div><span class="pill sub">${esc(nomSub(x.subcuenta))}</span></div>` : ''}${x.numero ? `<div class="muted">N° ${esc(x.numero)}</div>` : ''}${x.notas ? `<div class="muted">${esc(x.notas)}</div>` : ''}</td>
         <td class="chico">${x.falta > 0.009 ? vtoTxt(x.vencimiento) : dmy(x.vencimiento)}</td><td class="r">${money(x.importe)}</td>
         <td class="r">${x.falta > 0.009 ? `<b class="neg">${money(x.falta)}</b>` : ''}</td><td>${x.estado_pago === 'PAGADO' ? '<span class="pill ATENDIDO">Pagado</span>' : x.estado_pago === 'PARCIAL' ? '<span class="pill naranja">Parcial</span>' : '<span class="pill rojo">Pendiente</span>'}</td></tr>`).join('')
         || '<tr><td colspan="5" class="vacio">Todavía no cargaste resúmenes</td></tr>'}</tbody></table></div>
       <div class="ayuda">Los pagos se descuentan primero de los resúmenes que vencen antes.</div></div>
     <div class="card"><h3>${ico('cuenta')} Cuenta corriente</h3><div class="tabla-x"><table class="t comp"><thead><tr><th>Fecha</th><th>Movimiento</th><th class="r">Importe</th><th class="r">Saldo</th><th></th></tr></thead><tbody>
-      ${p.movimientos.map(mv => `<tr ${mv.tipo === 'PAGO' ? `data-g="${mv.id}"` : `data-r="${mv.id}"`} style="cursor:pointer"><td class="chico">${dmy(mv.fecha)}</td>
-        <td>${mv.tipo === 'RESUMEN' ? `Resumen${mv.x.numero ? ' N° ' + esc(mv.x.numero) : ''}` : `Pago${mv.x.cuenta ? ' · ' + esc(mv.x.cuenta) : ''}<div class="muted chico">${esc(MEDIOS[mv.x.medio] || '')}${mv.x.acreditado ? '' : ' · <b style="color:var(--naranja)">sin acreditar</b>'}</div>`}</td>
+      ${p.movimientos.filter(mv => ver(mv.x)).map(mv => `<tr ${mv.tipo === 'PAGO' ? `data-g="${mv.id}"` : `data-r="${mv.id}"`} style="cursor:pointer"><td class="chico">${dmy(mv.fecha)}</td>
+        <td>${subs.length && fs === null ? `<span class="pill sub">${esc(nomSub(mv.x.subcuenta))}</span> ` : ''}${mv.tipo === 'RESUMEN' ? `Resumen${mv.x.numero ? ' N° ' + esc(mv.x.numero) : ''}` : `Pago${mv.x.cuenta ? ' · ' + esc(mv.x.cuenta) : ''}<div class="muted chico">${esc(MEDIOS[mv.x.medio] || '')}${mv.x.acreditado ? '' : ' · <b style="color:var(--naranja)">sin acreditar</b>'}</div>`}</td>
         <td class="r">${mv.debe ? money0(mv.debe) : `<span class="pos">-${money0(mv.haber)}</span>`}</td><td class="r ${mv.saldo > 0.009 ? 'neg' : ''}">${money0(mv.saldo)}</td>
         <td>${mv.adjuntos.length ? miniComp(mv.adjuntos[0].archivo) : mv.tipo === 'PAGO' && mv.x.medio !== 'EFECTIVO' ? '<span class="neg chico">sin comp.</span>' : ''}</td></tr>`).join('') || '<tr><td colspan="5" class="vacio">Sin movimientos</td></tr>'}</tbody></table></div></div></div>`;
   $('#pvV').onclick = () => ir('proveedores');
   $('#pvE').onclick = () => editarProveedor(p, re);
-  $('#pvR').onclick = () => cargarResumen({ proveedor_id: p.id }, re);
-  $('#pvP').onclick = () => cargarPago({ tipo: 'PROVEEDOR', proveedor_id: p.id }, re);
+  $('#pvR').onclick = () => cargarResumen({ proveedor_id: p.id, subcuenta: fs || '' }, re);
+  $('#pvP').onclick = () => cargarPago({ tipo: 'PROVEEDOR', proveedor_id: p.id, subcuenta: fs || '' }, re);
   main.onclick = e => {
+    const f = e.target.closest('[data-fs]'); if (f) { FILTRO_SALDO[id] = f.dataset.fs === '*' ? null : f.dataset.fs; return re(); }
+    const ps = e.target.closest('[data-ps]'); if (ps) return cargarPago({ tipo: 'PROVEEDOR', proveedor_id: p.id, subcuenta: ps.dataset.ps }, re);
+    const rs = e.target.closest('[data-rs]'); if (rs) return cargarResumen({ proveedor_id: p.id, subcuenta: rs.dataset.rs }, re);
     const v = e.target.closest('[data-ver]'); if (v) return verArchivo(v.dataset.ver);
     const g = e.target.closest('[data-g]'); if (g) return verPago(+g.dataset.g, re);
     const r = e.target.closest('[data-r]'); if (r) { const x = p.resumenes.find(z => z.id === +r.dataset.r); if (x) cargarResumen(x, re); }

@@ -14,7 +14,23 @@ const opcionesGasto = (cats, sel) => {
   const o = c => `<option ${c === sel ? 'selected' : ''}>${esc(c)}</option>`;
   return pe.length ? `<optgroup label="Farmacia">${f.map(o).join('')}</optgroup><optgroup label="Personal">${pe.map(o).join('')}</optgroup>` : cats.map(o).join('');
 };
-const quienPago = p => p.tipo === 'PROVEEDOR' ? p.proveedor : p.tipo === 'SUELDO' ? p.empleado : p.categoria;
+const quienPago = p => p.tipo === 'PROVEEDOR' ? p.proveedor + (p.subcuenta ? ' · ' + p.subcuenta : '') : p.tipo === 'SUELDO' ? p.empleado : p.categoria;
+/* SALDOS SEPARADOS: botones para elegir de qué saldo es (ej. Cofaral: Roma 1 / Roma 2). Devuelve {valor(), poner(n)} */
+function elegirSaldo(el, prov, valor, alCambiar) {
+  let v = valor || '';
+  let subs = (prov && prov.subs) || [];
+  const pintar = () => {
+    if (!subs.length) { el.innerHTML = ''; el.style.display = 'none'; return; }
+    el.style.display = '';
+    const sal = n => (prov.saldos || []).find(x => x.nombre === n) || { saldo: 0 };
+    el.innerHTML = `<label>¿De qué saldo de ${esc(prov.nombre)}?</label><div class="saldos-el">${subs.map(x => { const s = sal(x.nombre);
+      return `<button type="button" data-sub="${esc(x.nombre)}" class="${x.nombre === v ? 'act' : ''}"><b>${esc(x.nombre)}</b><small>${s.saldo > 0.009 ? 'debés ' + money0(s.saldo) : s.saldo < -0.009 ? 'a favor ' + money0(-s.saldo) : 'al día'}</small></button>`; }).join('')}</div>`;
+  };
+  el.onclick = e => { const b = e.target.closest('[data-sub]'); if (!b) return; v = b.dataset.sub; pintar(); alCambiar && alCambiar(v); };
+  pintar();
+  return { valor: () => subs.length ? v : '', poner: n => { if (subs.some(x => x.nombre === n)) { v = n; pintar(); alCambiar && alCambiar(v); } }, hay: () => subs.length > 0,
+    cambiarProv: p => { prov = p; subs = (p && p.subs) || []; if (!subs.some(x => x.nombre === v)) v = ''; pintar(); } };
+}
 const verArchivo = a => abrirComprobante(a);
 let CACHE = {};
 async function listas(forzar) {
@@ -87,6 +103,7 @@ async function cargarPago(pre = {}, luego) {
     <div class="seg grande" id="cpT">${['PROVEEDOR', 'GASTO', 'SUELDO'].map(t => `<button type="button" data-t="${t}" class="${t === tipo ? 'act' : ''}">${ico(TIPO_ICO[t])} ${t === 'PROVEEDOR' ? 'A un proveedor' : t === 'GASTO' ? 'Un gasto' : 'Un sueldo'}</button>`).join('')}</div>
     <div class="g" style="margin-top:12px">
       <div class="t-PROVEEDOR"><label>Proveedor</label><select id="cpP"><option value="">Elegí…</option>${provs.map(x => `<option value="${x.id}" ${x.id === +p.proveedor_id ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select></div>
+      <div class="t-PROVEEDOR full" id="cpS"></div>
       <div class="t-GASTO"><label>Gasto</label><select id="cpC"><option value="">Elegí…</option>${opcionesGasto(cats, p.categoria)}</select></div>
       <div class="t-SUELDO"><label>Empleado</label><div class="inl" style="flex-wrap:nowrap;gap:6px"><select id="cpE"><option value="">Elegí…</option>${emps.map(x => `<option value="${x.id}" ${x.id === +p.empleado_id ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select>
         <button type="button" class="ab" id="cpEN" title="Agregar empleado">${ico('plus')}</button></div></div>
@@ -119,17 +136,22 @@ async function cargarPago(pre = {}, luego) {
     if (d.importe && !tocados.has('cpI') && !(aNum($('#cpI', m).value) > 0)) { $('#cpI', m).value = fmtIn(d.importe); $('#cpI', m).classList.add('leido'); puso.push('importe <b>' + money(d.importe) + '</b>'); }
     if (d.operacion && !tocados.has('cpO') && !$('#cpO', m).value) { $('#cpO', m).value = d.operacion; puso.push('operación ' + esc(d.operacion)); }
     if (d.fecha && !tocados.has('cpF') && !pre.id) { $('#cpF', m).value = d.fecha; puso.push('fecha ' + dmy(d.fecha)); }
-    if (d.proveedor_id && !$('#cpP', m).value && tipo === 'PROVEEDOR') { $('#cpP', m).value = d.proveedor_id; info(); puso.push('proveedor'); }
+    if (d.proveedor_id && !$('#cpP', m).value && tipo === 'PROVEEDOR') { $('#cpP', m).value = d.proveedor_id; cambioProv(); puso.push('proveedor'); }
+    if (d.subcuenta && tipo === 'PROVEEDOR' && +$('#cpP', m).value === d.proveedor_id && !saldo.valor()) { saldo.poner(d.subcuenta); puso.push('saldo <b>' + esc(d.subcuenta) + '</b>'); }
     el.innerHTML = puso.length ? `<div class="lee-comp ok">${ico('check')} Leí del comprobante: ${puso.join(' · ')}. <b>Revisalo</b> antes de guardar.</div>`
       : d.importe ? '' : `<div class="lee-comp no">No pude leer el importe del comprobante: escribilo a mano.</div>`;
   };
   const zona = zonaAdjuntos($('#cpA', m), p.adjuntos, pre.id ? () => {} : null, pre.archivos || [], leerAdjuntos);
 
   const cerrar0 = m.cerrar; m.cerrar = () => { zona.soltar(); cerrar0(); };
+  const saldo = elegirSaldo($('#cpS', m), L.prov.find(v => v.id === +p.proveedor_id), p.subcuenta || pre.subcuenta || '', () => info());
+  const cambioProv = () => { saldo.cambiarProv(L.prov.find(v => v.id === +$('#cpP', m).value)); info(); };
   const pintarTipo = () => { $$('.t-PROVEEDOR,.t-GASTO,.t-SUELDO', m).forEach(x => x.style.display = x.classList.contains('t-' + tipo) ? '' : 'none'); info(); };
   const info = () => {
     const el = $('#cpInfo', m); el.innerHTML = '';
-    if (tipo === 'PROVEEDOR') { const x = L.prov.find(v => v.id === +$('#cpP', m).value); if (!x) return;
+    if (tipo === 'PROVEEDOR') { let x = L.prov.find(v => v.id === +$('#cpP', m).value); if (!x) return;
+      if (saldo.hay()) { const s = (x.saldos || []).find(z => z.nombre === saldo.valor()); if (!s) { el.innerHTML = `<div class="muted chico">Elegí de qué saldo es el pago.</div>`; return; }
+        x = Object.assign({}, x, { saldo: s.saldo, vence_semana: s.vence_semana }); }
       el.innerHTML = `<div class="info-prov"><span>Le debés <b class="${x.saldo > 0 ? 'neg' : ''}">${money(Math.max(0, x.saldo))}</b>${x.vence_semana > 0.009 ? ` · vence en los próximos 7 días <b>${money(x.vence_semana)}</b>` : ''}${x.saldo < -0.009 ? ` · tenés <b class="pos">${money(-x.saldo)}</b> a favor` : ''}</span>
         ${x.vence_semana > 0.009 && !pre.id ? `<button type="button" class="btn chico" id="cpTodo">Pagar ${money0(x.vence_semana)}</button>` : ''}</div>`;
       if ($('#cpTodo', m)) $('#cpTodo', m).onclick = () => { $('#cpI', m).value = fmtIn(x.vence_semana); };
@@ -143,7 +165,7 @@ async function cargarPago(pre = {}, luego) {
       }).catch(() => {}); }
   };
   $('#cpT', m).onclick = e => { const b = e.target.closest('[data-t]'); if (!b) return; tipo = b.dataset.t; $$('#cpT button', m).forEach(x => x.classList.toggle('act', x === b)); pintarTipo(); };
-  $('#cpP', m).onchange = info; $('#cpE', m).onchange = info; $('#cpF', m).addEventListener('change', () => tipo === 'SUELDO' && info());
+  $('#cpP', m).onchange = cambioProv; $('#cpE', m).onchange = info; $('#cpF', m).addEventListener('change', () => tipo === 'SUELDO' && info());
   const verCheque = () => $$('.s-CHEQUE', m).forEach(x => x.style.display = ['CHEQUE', 'ECHEQ'].includes($('#cpM', m).value) ? '' : 'none');
   $('#cpM', m).onchange = () => { if ($('#cpM', m).value === 'EFECTIVO') { const ef = ctas.find(c => c.tipo === 'EFECTIVO'); if (ef) $('#cpK', m).value = ef.id; } verCheque(); };
   verCheque();
@@ -153,7 +175,8 @@ async function cargarPago(pre = {}, luego) {
   if (pre.archivos && pre.archivos.length && !pre.id) leerAdjuntos(pre.archivos);
   setTimeout(() => (tipo === 'PROVEEDOR' && !$('#cpP', m).value ? $('#cpP', m) : $('#cpI', m)).focus(), 60);
   $('#cpOk', m).onclick = async () => {
-    const d = { id: pre.id, tipo, proveedor_id: $('#cpP', m).value, categoria: $('#cpC', m).value, empleado_id: $('#cpE', m).value, fecha: $('#cpF', m).value, importe: $('#cpI', m).value,
+    if (tipo === 'PROVEEDOR' && saldo.hay() && !saldo.valor()) return toast('Elegí de qué saldo es el pago', 'err');
+    const d = { id: pre.id, tipo, proveedor_id: $('#cpP', m).value, subcuenta: tipo === 'PROVEEDOR' ? saldo.valor() : '', categoria: $('#cpC', m).value, empleado_id: $('#cpE', m).value, fecha: $('#cpF', m).value, importe: $('#cpI', m).value,
       medio: $('#cpM', m).value, cuenta_id: $('#cpK', m).value, operacion: $('#cpO', m).value, periodo: tipo === 'SUELDO' ? $('#cpPe', m).value : '', concepto: $('#cpD', m).value,
       adelanto: tipo === 'SUELDO' && $('#cpAd', m).checked ? 1 : 0,
       cheque_numero: $('#cpChN', m).value, cheque_fecha_pago: $('#cpChF', m).value,

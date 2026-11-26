@@ -62,7 +62,9 @@ CREATE TABLE IF NOT EXISTS gastos_fijos_salteados (fijo_id INTEGER NOT NULL, per
   const MIGRACIONES = {
     empleados: [['valor_dia', 'REAL DEFAULT 0'], ['dias_semana', 'REAL DEFAULT 7'], ['cena', 'REAL DEFAULT 0'], ['saldo_inicial', 'REAL DEFAULT 0'], ['cuenta_desde', "TEXT DEFAULT ''"],
       ['vac_dias', 'INTEGER DEFAULT 14'], ['ingreso', "TEXT DEFAULT ''"]],
-    pagos: [['adelanto', 'INTEGER DEFAULT 0'], ['fijo_id', 'INTEGER'], ['fijo_periodo', "TEXT DEFAULT ''"]],
+    pagos: [['adelanto', 'INTEGER DEFAULT 0'], ['fijo_id', 'INTEGER'], ['fijo_periodo', "TEXT DEFAULT ''"], ['subcuenta', "TEXT DEFAULT ''"]],
+    proveedores: [['subcuentas', "TEXT DEFAULT ''"]],       // SALDOS SEPARADOS (ej. Cofaral: Roma 1 y Roma 2): JSON [{nombre, clave}]
+    resumenes: [['subcuenta', "TEXT DEFAULT ''"]],
   };
 
   class ErrorNegocio extends Error {}
@@ -227,27 +229,49 @@ CREATE TABLE IF NOT EXISTS gastos_fijos_salteados (fijo_id INTEGER NOT NULL, per
   });
 
   /* ------------------------------------------------ proveedores, resúmenes y saldo */
+  const hastaSemana = () => masDias(hoy(), 7);
+  /* saldos separados de un proveedor (ej. Cofaral: "Roma 1" y "Roma 2"): [{nombre, clave}] */
+  const subsDe = p => { try { const l = JSON.parse((p && p.subcuentas) || '[]'); return Array.isArray(l) ? l.filter(x => x && x.nombre) : []; } catch (e) { return []; } };
   function estadoProveedor(pid) {
+    const prov = q1('SELECT * FROM proveedores WHERE id = ?', [pid]), subs = subsDe(prov);
     const res = q("SELECT * FROM resumenes WHERE proveedor_id = ? AND estado = 'ACTIVO' ORDER BY COALESCE(NULLIF(vencimiento,''), fecha), fecha, id", [pid]);
     const pag = q("SELECT * FROM pagos WHERE proveedor_id = ? AND tipo = 'PROVEEDOR' AND estado = 'ACTIVO' ORDER BY fecha, id", [pid]);
-    const totalRes = r2(sum(res, x => x.importe)), totalPag = r2(sum(pag, x => x.importe));
-    let disp = totalPag; const h = hoy();
-    for (const x of res) {
-      x.pagado = r2(Math.min(x.importe, Math.max(0, disp))); disp = r2(disp - x.pagado);
-      x.falta = r2(x.importe - x.pagado);
-      x.estado_pago = x.falta < 0.01 ? 'PAGADO' : x.pagado > 0.009 ? 'PARCIAL' : 'PENDIENTE';
-      x.vencido = !!(x.falta > 0.009 && x.vencimiento && x.vencimiento < h);
+    const totalRes = r2(sum(res, x => x.importe)), totalPag = r2(sum(pag, x => x.importe)), h = hoy(), hs = hastaSemana();
+    /* cada saldo se calcula por separado: los pagos de "Roma 1" sólo descuentan resúmenes de "Roma 1" */
+    const nombres = subs.map(x => x.nombre);
+    for (const x of [...res, ...pag]) { x.subcuenta = x.subcuenta || ''; if (!nombres.includes(x.subcuenta)) nombres.push(x.subcuenta); }
+    const saldos = [];
+    for (const n of nombres) {
+      const rs = res.filter(x => x.subcuenta === n), ps = pag.filter(x => x.subcuenta === n);
+      let disp = r2(sum(ps, x => x.importe));
+      for (const x of rs) {
+        x.pagado = r2(Math.min(x.importe, Math.max(0, disp))); disp = r2(disp - x.pagado);
+        x.falta = r2(x.importe - x.pagado);
+        x.estado_pago = x.falta < 0.01 ? 'PAGADO' : x.pagado > 0.009 ? 'PARCIAL' : 'PENDIENTE';
+        x.vencido = !!(x.falta > 0.009 && x.vencimiento && x.vencimiento < h);
+      }
+      const pend = rs.filter(x => x.falta > 0.009), sa = ps.filter(x => !x.acreditado);
+      if (subs.length) saldos.push({ nombre: n, facturado: r2(sum(rs, x => x.importe)), pagado: r2(sum(ps, x => x.importe)), saldo: r2(sum(rs, x => x.importe) - sum(ps, x => x.importe)),
+        vence_semana: r2(sum(pend.filter(x => (x.vencimiento || x.fecha) <= hs), x => x.falta)), vencido: r2(sum(pend.filter(x => x.vencido), x => x.falta)),
+        sin_acreditar: r2(sum(sa, x => x.importe)), sin_acreditar_n: sa.length, proximo: pend.map(x => x.vencimiento || x.fecha).sort()[0] || '' });
     }
     const sinAcr = pag.filter(x => !x.acreditado);
     return { resumenes: res, pagos: pag, facturado: totalRes, pagado: totalPag, saldo: r2(totalRes - totalPag), sin_acreditar: r2(sum(sinAcr, x => x.importe)),
-      sin_acreditar_n: sinAcr.length, saldo_proveedor: r2(totalRes - totalPag + sum(sinAcr, x => x.importe)) };
+      sin_acreditar_n: sinAcr.length, saldo_proveedor: r2(totalRes - totalPag + sum(sinAcr, x => x.importe)), saldos };
   }
-  const hastaSemana = () => masDias(hoy(), 7);
+  /* qué saldo corresponde: si el proveedor tiene saldos separados hay que elegir uno */
+  function subcuentaOk(prov, v) {
+    const subs = subsDe(prov); if (!subs.length) return '';
+    const n = String(v || '').trim(), x = subs.find(s => s.nombre.toLowerCase() === n.toLowerCase());
+    if (!x) E(`Elegí de qué saldo de ${prov.nombre} es: ${subs.map(s => s.nombre).join(' o ')}`);
+    return x.nombre;
+  }
   ruta('GET', '/api/proveedores', () => {
     const out = q('SELECT * FROM proveedores ORDER BY activo DESC, principal DESC, nombre COLLATE NOCASE'), hs = hastaSemana();
     for (const p of out) {
       const e = estadoProveedor(p.id);
-      for (const k of ['saldo', 'facturado', 'pagado', 'sin_acreditar', 'sin_acreditar_n', 'saldo_proveedor']) p[k] = e[k];
+      for (const k of ['saldo', 'facturado', 'pagado', 'sin_acreditar', 'sin_acreditar_n', 'saldo_proveedor', 'saldos']) p[k] = e[k];
+      p.subs = subsDe(p);
       const pend = e.resumenes.filter(x => x.falta > 0.009);
       p.vence_semana = r2(sum(pend.filter(x => (x.vencimiento || x.fecha) <= hs), x => x.falta));
       p.vencido = r2(sum(pend.filter(x => x.vencido), x => x.falta));
@@ -261,14 +285,45 @@ CREATE TABLE IF NOT EXISTS gastos_fijos_salteados (fijo_id INTEGER NOT NULL, per
     const par = [nombre, txt(d.cuit, 20), txt(d.telefono, 40), txt(d.email, 100), txt(d.contacto, 80), txt(d.cbu, 60), String(d.notas || '').trim().slice(0, 1000),
       Math.trunc(num(d.dias_pago || 7)) || 7, d.principal ? 1 : 0, (d.activo ?? 1) ? 1 : 0];
     if (q1('SELECT id FROM proveedores WHERE nombre = ? COLLATE NOCASE AND id != ?', [nombre, +d.id || 0])) E('Ya hay un proveedor que se llama ' + nombre);
+    /* saldos separados: [{nombre, clave, antes}] — "antes" es el nombre que tenía (para renombrar lo ya cargado) */
+    let subs = null;
+    if (Array.isArray(d.subcuentas)) {
+      subs = []; const vistos = new Set();
+      for (const x of d.subcuentas) {
+        const n = txt(x && x.nombre, 40); if (!n) continue;
+        if (vistos.has(n.toLowerCase())) E('Hay dos saldos que se llaman ' + n); vistos.add(n.toLowerCase());
+        subs.push({ nombre: n, clave: txt(x.clave, 60), antes: txt(x.antes, 40) });
+      }
+      if (subs.length === 1) E('Para separar el saldo hacen falta al menos dos (ej. Roma 1 y Roma 2). Si es uno solo, dejalo vacío.');
+    }
     let pid;
     if (d.id) { pid = +d.id; run('UPDATE proveedores SET nombre=?, cuit=?, telefono=?, email=?, contacto=?, cbu=?, notas=?, dias_pago=?, principal=?, activo=? WHERE id=?', [...par, pid]); }
     else pid = run('INSERT INTO proveedores(nombre, cuit, telefono, email, contacto, cbu, notas, dias_pago, principal, activo, creado) VALUES (?,?,?,?,?,?,?,?,?,?,?)', [...par, ahora()]);
+    if (subs) {
+      const viejos = subsDe(q1('SELECT * FROM proveedores WHERE id = ?', [pid])).map(x => x.nombre);
+      for (const x of subs) if (x.antes && x.antes !== x.nombre && viejos.includes(x.antes))       // cambió el nombre: lo cargado pasa al nombre nuevo
+        for (const t of ['resumenes', 'pagos']) run(`UPDATE ${t} SET subcuenta = ? WHERE proveedor_id = ? AND subcuenta = ?`, [x.nombre, pid, x.antes]);
+      const quedan = subs.map(x => x.nombre);
+      for (const v of viejos) if (!quedan.includes(v) && !subs.some(x => x.antes === v)) {
+        const usado = q1("SELECT (SELECT COUNT(*) FROM resumenes WHERE proveedor_id = ? AND subcuenta = ? AND estado = 'ACTIVO') + (SELECT COUNT(*) FROM pagos WHERE proveedor_id = ? AND subcuenta = ? AND estado = 'ACTIVO') AS n", [pid, v, pid, v]).n;
+        if (usado) E(`No se puede sacar el saldo "${v}": tiene ${usado} resumen(es) o pago(s). Cambiale el nombre o pasalos a otro saldo primero.`);
+      }
+      if (subs.length && d.asignar_viejos) {      // lo cargado antes de separar va a uno de los saldos
+        const a = subs.find(x => x.nombre === d.asignar_viejos); if (!a) E('Elegí a qué saldo va lo que ya estaba cargado');
+        for (const t of ['resumenes', 'pagos']) run(`UPDATE ${t} SET subcuenta = ? WHERE proveedor_id = ? AND COALESCE(subcuenta, '') = ''`, [a.nombre, pid]);
+      }
+      if (!subs.length) {
+        const usado = q1("SELECT COUNT(*) AS n FROM (SELECT id FROM resumenes WHERE proveedor_id = ? AND subcuenta != '' AND estado = 'ACTIVO' UNION ALL SELECT id FROM pagos WHERE proveedor_id = ? AND subcuenta != '' AND estado = 'ACTIVO')", [pid, pid]).n;
+        if (usado && !d.juntar) return { confirmar: `${nombre} tiene ${usado} resumen(es) y pago(s) separados por saldo. ¿Los junto todos en un solo saldo?`, id: pid };
+        for (const t of ['resumenes', 'pagos']) run(`UPDATE ${t} SET subcuenta = '' WHERE proveedor_id = ?`, [pid]);
+      }
+      run('UPDATE proveedores SET subcuentas = ? WHERE id = ?', [subs.length ? JSON.stringify(subs.map(x => ({ nombre: x.nombre, clave: x.clave }))) : '', pid]);
+    }
     return { ok: true, id: pid };
   });
   ruta('GET', '/api/proveedores/<int>', (d, pid) => {
     let p = q1('SELECT * FROM proveedores WHERE id = ?', [+pid]); if (!p) throw Object.assign(new Error('No existe'), { status: 404 });
-    const e = estadoProveedor(+pid); Object.assign(p, e);
+    const e = estadoProveedor(+pid); Object.assign(p, e); p.subs = subsDe(p);
     const adj = {};
     for (const a of q('SELECT a.* FROM adjuntos a LEFT JOIN pagos g ON g.id = a.pago_id LEFT JOIN resumenes r ON r.id = a.resumen_id WHERE g.proveedor_id = ? OR r.proveedor_id = ? ORDER BY a.id', [+pid, +pid])) {
       const k = a.pago_id ? 'P' + a.pago_id : 'R' + a.resumen_id; (adj[k] = adj[k] || []).push(a);
@@ -287,14 +342,16 @@ CREATE TABLE IF NOT EXISTS gastos_fijos_salteados (fijo_id INTEGER NOT NULL, per
     const venc = d.vencimiento ? fechaOk(d.vencimiento, 'fecha de pago') : masDias(f, prov.dias_pago || 7);
     if (venc < f) E('La fecha de pago no puede ser antes del cierre');
     const par = [pid, f, venc, txt(d.numero, 40), importe(d.importe), String(d.notas || '').trim().slice(0, 500)];
+    const sub = subcuentaOk(prov, d.subcuenta);
     let rid;
     if (d.id) { rid = +d.id; run('UPDATE resumenes SET proveedor_id=?, fecha=?, vencimiento=?, numero=?, importe=?, notas=? WHERE id=?', [...par, rid]); }
     else {
-      if (q1("SELECT id FROM resumenes WHERE proveedor_id = ? AND fecha = ? AND ABS(importe - ?) < 0.01 AND estado = 'ACTIVO'", [pid, f, par[4]]) && !d.forzar)
+      if (q1("SELECT id FROM resumenes WHERE proveedor_id = ? AND fecha = ? AND ABS(importe - ?) < 0.01 AND estado = 'ACTIVO' AND COALESCE(subcuenta,'') = ?", [pid, f, par[4], subcuentaOk(prov, d.subcuenta)]) && !d.forzar)
         return { confirmar: `Ya cargaste un resumen de ${prov.nombre} del ${dmy(f)} por ${moneyTxt(par[4])}. ¿Lo cargo igual?` };
       rid = run('INSERT INTO resumenes(proveedor_id, fecha, vencimiento, numero, importe, notas, creado) VALUES (?,?,?,?,?,?,?)', [...par, ahora()]);
     }
-    anotar('Resumen ' + (d.id ? 'modificado' : 'cargado'), `${prov.nombre} ${dmy(f)} ${moneyTxt(par[4])}`);
+    run('UPDATE resumenes SET subcuenta = ? WHERE id = ?', [sub, rid]);
+    anotar('Resumen ' + (d.id ? 'modificado' : 'cargado'), `${prov.nombre}${sub ? ' (' + sub + ')' : ''} ${dmy(f)} ${moneyTxt(par[4])}`);
     return { ok: true, id: rid };
   });
   ruta('DELETE', '/api/resumenes/<int>', (d, rid) => {
@@ -659,6 +716,7 @@ CREATE TABLE IF NOT EXISTS gastos_fijos_salteados (fijo_id INTEGER NOT NULL, per
     if (tipo === 'PROVEEDOR') { prov = q1('SELECT * FROM proveedores WHERE id = ?', [+d.proveedor_id || 0]); if (!prov) E('Elegí el proveedor'); }
     else if (tipo === 'SUELDO') { emp = q1('SELECT * FROM empleados WHERE id = ?', [+d.empleado_id || 0]); if (!emp) E('Elegí a quién le pagaste el sueldo'); }
     else { cat = txt(d.categoria, 40); if (!cat) E('Elegí qué gasto es (alquiler, internet...)'); }
+    const sub = prov ? subcuentaOk(prov, d.subcuenta) : '';
     const imp = importe(d.importe), f = fechaOk(d.fecha || hoy());
     const acr = tipo === 'PROVEEDOR' && d.acreditado ? 1 : 0, adel = tipo === 'SUELDO' && d.adelanto ? 1 : 0;
     const par = [tipo, f, imp, medio, cuentaId, prov ? prov.id : null, cat, emp ? emp.id : null, txt(d.periodo, 40), txt(d.concepto, 160), txt(d.operacion, 60), String(d.notas || '').trim().slice(0, 1000)];
@@ -671,11 +729,12 @@ CREATE TABLE IF NOT EXISTS gastos_fijos_salteados (fijo_id INTEGER NOT NULL, per
       run('UPDATE pagos SET tipo=?, fecha=?, importe=?, medio=?, cuenta_id=?, proveedor_id=?, categoria=?, empleado_id=?, periodo=?, concepto=?, operacion=?, notas=?, modificado=?, adelanto=? WHERE id=?', [...par, ahora(), adel, gid]);
     } else gid = run('INSERT INTO pagos(tipo, fecha, importe, medio, cuenta_id, proveedor_id, categoria, empleado_id, periodo, concepto, operacion, notas, acreditado, acreditado_fecha, creado, adelanto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
       [...par, acr, acr ? hoy() : '', ahora(), adel]);
+    run('UPDATE pagos SET subcuenta = ? WHERE id = ?', [sub, gid]);
     if (d.fijo_id !== undefined) {      // pago de un gasto fijo: queda marcado ese mes como pagado
       const fid = tipo === 'GASTO' && +d.fijo_id && q1('SELECT 1 FROM gastos_fijos WHERE id = ?', [+d.fijo_id]) ? +d.fijo_id : null;
       run('UPDATE pagos SET fijo_id = ?, fijo_periodo = ? WHERE id = ?', [fid, fid && /^\d{4}-\d{2}$/.test(d.fijo_periodo || '') ? d.fijo_periodo : (fid ? f.slice(0, 7) : ''), gid]);
     }
-    anotar('Pago ' + (d.id ? 'modificado' : 'cargado'), `${tipo.toLowerCase()} ${prov ? prov.nombre : emp ? emp.nombre : cat} ${dmy(f)} ${moneyTxt(imp)}`);
+    anotar('Pago ' + (d.id ? 'modificado' : 'cargado'), `${tipo.toLowerCase()} ${prov ? prov.nombre + (sub ? ' (' + sub + ')' : '') : emp ? emp.nombre : cat} ${dmy(f)} ${moneyTxt(imp)}`);
     /* pagado con cheque o eCheq: queda también en la sección Cheques (unido al pago) */
     const ch = q1('SELECT * FROM cheques WHERE pago_id = ?', [gid]);
     if (medio === 'CHEQUE' || medio === 'ECHEQ') {
@@ -851,7 +910,8 @@ CREATE TABLE IF NOT EXISTS gastos_fijos_salteados (fijo_id INTEGER NOT NULL, per
       Object.assign(p, { saldo: e.saldo, sin_acreditar: e.sin_acreditar, sin_acreditar_n: e.sin_acreditar_n });
       p.vence_semana = r2(sum(pend.filter(x => (x.vencimiento || x.fecha) <= hs), x => x.falta));
       p.vencido = r2(sum(pend.filter(x => x.vencido), x => x.falta));
-      p.pendientes = pend.slice(0, 4).map(x => ({ fecha: x.fecha, vencimiento: x.vencimiento, falta: x.falta, importe: x.importe, vencido: x.vencido }));
+      p.pendientes = pend.slice(0, 4).map(x => ({ fecha: x.fecha, vencimiento: x.vencimiento, falta: x.falta, importe: x.importe, vencido: x.vencido, subcuenta: x.subcuenta }));
+      p.saldos = e.saldos;
       p.pagado_semana = r2(sum(e.pagos.filter(x => x.fecha >= lunes), x => x.importe));
       deuda = r2(deuda + Math.max(0, e.saldo));
       if (p.principal || p.saldo > 0.009 || p.sin_acreditar_n) paraPagar.push(p);
@@ -985,7 +1045,7 @@ CREATE TABLE IF NOT EXISTS gastos_fijos_salteados (fijo_id INTEGER NOT NULL, per
     for (const p of q('SELECT * FROM proveedores WHERE activo = 1')) {
       for (const x of estadoProveedor(p.id).resumenes.filter(x => x.falta > 0.009)) {
         const f = x.vencimiento || x.fecha; if (f > hasta) continue;
-        items.push({ tipo: 'RESUMEN', fecha: f, importe: x.falta, titulo: p.nombre, detalle: `Resumen del ${dmy(x.fecha)}${x.numero ? ' · N° ' + x.numero : ''}${x.pagado > 0.009 ? ' · falta ' + moneyTxt(x.falta) + ' de ' + moneyTxt(x.importe) : ''}`, proveedor_id: p.id, resumen_id: x.id });
+        items.push({ tipo: 'RESUMEN', fecha: f, importe: x.falta, titulo: p.nombre + (x.subcuenta ? ' · ' + x.subcuenta : ''), subcuenta: x.subcuenta, detalle: `Resumen del ${dmy(x.fecha)}${x.numero ? ' · N° ' + x.numero : ''}${x.pagado > 0.009 ? ' · falta ' + moneyTxt(x.falta) + ' de ' + moneyTxt(x.importe) : ''}`, proveedor_id: p.id, resumen_id: x.id });
       }
     }
     for (const c of q("SELECT ch.*, v.nombre AS proveedor, cu.nombre AS cuenta FROM cheques ch LEFT JOIN proveedores v ON v.id = ch.proveedor_id LEFT JOIN cuentas cu ON cu.id = ch.cuenta_id WHERE ch.estado = 'PENDIENTE' AND ch.fecha_pago <= ? ORDER BY ch.fecha_pago", [hasta]))

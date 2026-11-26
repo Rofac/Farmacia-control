@@ -75,7 +75,7 @@ function ponerSaldo(actual, luego) {
   setTimeout(() => { if (!m.contains(document.activeElement) || document.activeElement.tagName === 'BUTTON') $('#sbI', m).focus(); }, 60);
 }
 function pagarItem(x, luego) {
-  if (x.tipo === 'RESUMEN') return cargarPago({ tipo: 'PROVEEDOR', proveedor_id: x.proveedor_id, importe: x.importe }, luego);
+  if (x.tipo === 'RESUMEN') return cargarPago({ tipo: 'PROVEEDOR', proveedor_id: x.proveedor_id, subcuenta: x.subcuenta || '', importe: x.importe }, luego);
   if (x.tipo === 'FIJO') return cargarPago({ tipo: 'GASTO', categoria: x.categoria, importe: x.importe || '', concepto: x.titulo + ' · ' + mesTxt(x.periodo), medio: x.medio, cuenta_id: x.cuenta_id,
     fijo_id: x.fijo_id, fijo_periodo: x.periodo, fijo_nombre: x.titulo, fijo_mes: mesTxt(x.periodo), variable: x.variable }, luego);
 }

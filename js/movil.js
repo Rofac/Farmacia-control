@@ -186,7 +186,11 @@ function leerDatos(texto, L) {
     return (n.length >= 4 && tn.includes(n)) || (p.cuit && p.cuit.replace(/\D/g, '').length >= 10 && dig.includes(p.cuit.replace(/\D/g, ''))) ||
       (p.cbu && p.cbu.replace(/\s/g, '').length >= 6 && (/^\d+$/.test(p.cbu.replace(/\s/g, '')) ? dig.includes(p.cbu.replace(/\s/g, '')) : tn.includes(sinTilde(p.cbu.trim()))));
   });
-  if (prov) { out.tipo = 'PROVEEDOR'; out.proveedor_id = prov.id; }
+  if (prov) { out.tipo = 'PROVEEDOR'; out.proveedor_id = prov.id;
+    /* saldos separados (ej. Roma 1 / Roma 2): si el comprobante trae el N° de cliente o la referencia de uno, lo elige */
+    const sub = (prov.subs || []).find(s => { const c = String(s.clave || '').trim(); if (c.length < 3) return false;
+      const cd = c.replace(/\D/g, ''); return cd.length >= 3 && cd === c.replace(/[\s.-]/g, '') ? new RegExp('(^|\\D)' + cd + '(\\D|$)').test(t) : tn.includes(sinTilde(c)); });
+    if (sub) out.subcuenta = sub.nombre; }
   const emp = !prov && (L.emp || []).filter(e => e.activo).find(e => { const n = sinTilde(e.nombre); return n.length >= 5 && tn.includes(n); });
   if (emp) { out.tipo = 'SUELDO'; out.empleado_id = emp.id; }
   const fm = t.match(/\b(\d{2})\/(\d{2})\/(\d{4})\b/); if (fm) { const f = `${fm[3]}-${fm[2]}-${fm[1]}`; if (f <= hoy() && f >= sumarDias(hoy(), -60)) out.fecha = f; }
